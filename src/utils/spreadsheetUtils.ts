@@ -16,7 +16,6 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
         const items: InventoryItem[] = jsonData.map((row: any) => {
           // Create a base item with required fields
           const item: InventoryItem = {
-            name: row.name || row.Name || row.ITEM || row.Item || '',
             status: 'pending',
             photos: [],
             lastUpdated: new Date(),
@@ -27,7 +26,7 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
 
           // Add all other columns from the spreadsheet as custom fields
           Object.keys(row).forEach(key => {
-            if (!['name', 'Name', 'ITEM', 'Item'].includes(key)) {
+            if (!['Name', 'ITEM', 'Item'].includes(key)) {
               item.customFields[key] = row[key];
             }
           });

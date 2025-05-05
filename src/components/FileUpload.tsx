@@ -5,7 +5,7 @@ import { parseSpreadsheet } from '../utils/spreadsheetUtils';
 import { InventoryItem } from '../db/database';
 
 interface FileUploadProps {
-  onFileUpload: (items: InventoryItem[], fileName: string) => void;
+  onFileUpload: (items: InventoryItem[], fileName?: string) => void;
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload }) => {
@@ -17,7 +17,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload }) => {
         
         // Get the original filename without extension
         const fileName = file.name.replace(/\.[^/.]+$/, "");
-        
         onFileUpload(items, fileName);
       } catch (error) {
         console.error('Error parsing spreadsheet:', error);

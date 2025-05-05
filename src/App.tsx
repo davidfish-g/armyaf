@@ -15,13 +15,16 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Drawer
 } from '@mui/material';
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
+import { LogViewer } from './components/LogViewer';
 import { db, InventoryItem as InventoryItemType, Checklist } from './db/database';
 import { exportToSpreadsheet } from './utils/spreadsheetUtils';
-import { Close, ArrowDropDown } from '@mui/icons-material';
+import { Close, ArrowDropDown, History } from '@mui/icons-material';
+import { logInventoryActivity, logItemUpdate } from './utils/logUtils';
 
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
@@ -32,6 +35,7 @@ function App() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [checklistToDelete, setChecklistToDelete] = useState<number | null>(null);
+  const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
 
   useEffect(() => {
     loadChecklists();
@@ -82,39 +86,42 @@ function App() {
     }
   };
 
-  const handleFileUpload = async (newItems: InventoryItemType[], fileName: string) => {
+  const handleFileUpload = async (newItems: InventoryItemType[], fileName?: string) => {
     setLoading(true);
     try {
       // Use the uploaded file's name as the base name for the sheet
-      // Strip any invalid characters from the filename
-      const baseChecklistName = fileName.trim() || "Inventory";
+      const baseChecklistName = fileName?.trim() || "Inventory";
       let checklistName = baseChecklistName;
-      
       // Count sheets with the same base name
       const existingSheets = await db.checklists.toArray();
       const similarSheets = existingSheets.filter(sheet => 
         sheet.name === baseChecklistName || sheet.name.startsWith(`${baseChecklistName} (`)
       );
-
       // If we already have sheets with the same base name, add a number
       if (similarSheets.length > 0) {
         checklistName = `${baseChecklistName} (${similarSheets.length})`;
       }
-
       const checklistId = await db.checklists.add({
         name: checklistName,
         createdAt: new Date(),
         lastModified: new Date(),
         items: []
       });
-
       // Add items with the checklist ID
       const itemsWithChecklist = newItems.map(item => ({
         ...item,
         checklistId
       }));
-
       await db.items.bulkAdd(itemsWithChecklist);
+      
+      // Log the import of new items
+      await logInventoryActivity(
+        'CREATE',
+        { checklistId },
+        `Imported ${itemsWithChecklist.length} items to checklist "${checklistName}"`,
+        { importedCount: itemsWithChecklist.length, fileName }
+      );
+      
       await loadChecklists();
       setActiveChecklistId(checklistId);
       setIsUploadDialogOpen(false);
@@ -127,9 +134,15 @@ function App() {
 
   const handleItemUpdate = async (updatedItem: InventoryItemType) => {
     try {
+      // Find the existing item before the update
+      const existingItem = items.find(item => item.id === updatedItem.id);
+      
+      if (!existingItem) {
+        console.error('Could not find item to update with id:', updatedItem.id);
+        return;
+      }
+      
       await db.items.update(updatedItem.id!, {
-        name: updatedItem.name,
-        serialNumber: updatedItem.serialNumber,
         status: updatedItem.status,
         photos: updatedItem.photos,
         notes: updatedItem.notes,
@@ -137,6 +150,21 @@ function App() {
         checklistId: updatedItem.checklistId,
         customFields: updatedItem.customFields
       });
+      
+      // Determine the type of update for logging
+      let action: 'UPDATE' | 'STATUS_CHANGE' | 'PHOTO_ADD' | 'PHOTO_DELETE' = 'UPDATE';
+      
+      if (existingItem.status !== updatedItem.status) {
+        action = 'STATUS_CHANGE';
+      } else if (existingItem.photos.length < updatedItem.photos.length) {
+        action = 'PHOTO_ADD';
+      } else if (existingItem.photos.length > updatedItem.photos.length) {
+        action = 'PHOTO_DELETE';
+      }
+      
+      // Log the changes
+      await logItemUpdate(existingItem, updatedItem, action);
+      
       setItems(items.map(item =>
         item.id === updatedItem.id ? updatedItem : item
       ));
@@ -147,23 +175,51 @@ function App() {
 
   const handleItemDelete = async (itemId: number) => {
     try {
+      // Get the item before deletion for logging
+      const itemToDelete = items.find(item => item.id === itemId);
+      
+      if (!itemToDelete) {
+        console.error('Could not find item to delete with id:', itemId);
+        return;
+      }
+      
       await db.items.delete(itemId);
+      
+      // Log the deletion
+      await logInventoryActivity(
+        'DELETE',
+        itemToDelete,
+        `Deleted item from checklist`,
+        { deletedItemFields: itemToDelete.customFields }
+      );
+      
       setItems(items.filter(item => item.id !== itemId));
     } catch (error) {
       console.error('Error deleting item:', error);
     }
   };
 
-  const handleExport = (format: 'xlsx' | 'ods' | 'csv') => {
+  const handleExport = async (format: 'xlsx' | 'ods' | 'csv') => {
     const blob = exportToSpreadsheet(items, format);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `inventory-${new Date().toISOString().split('T')[0]}.${format}`;
+    const fileName = `inventory-${new Date().toISOString().split('T')[0]}.${format}`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+    
+    // Log the export
+    const checklist = checklists.find(c => c.id === activeChecklistId);
+    await logInventoryActivity(
+      'EXPORT',
+      { checklistId: activeChecklistId || undefined },
+      `Exported ${items.length} items as ${format}`,
+      { format, checklistName: checklist?.name, exportedCount: items.length }
+    );
+    
     setExportAnchorEl(null);
   };
 
@@ -181,7 +237,15 @@ function App() {
     if (!checklistToDelete) return;
     
     try {
+      // Find the checklist before deletion for logging
+      const checklistToBeDeleted = checklists.find(c => c.id === checklistToDelete);
+      
       // Delete all items associated with this checklist
+      const itemsToDelete = await db.items
+        .where('checklistId')
+        .equals(checklistToDelete)
+        .toArray();
+      
       await db.items
         .where('checklistId')
         .equals(checklistToDelete)
@@ -189,6 +253,17 @@ function App() {
       
       // Delete the checklist itself
       await db.checklists.delete(checklistToDelete);
+      
+      // Log the deletion of the checklist and its items
+      await logInventoryActivity(
+        'DELETE',
+        { checklistId: checklistToDelete },
+        `Deleted checklist "${checklistToBeDeleted?.name}" with ${itemsToDelete.length} items`,
+        { 
+          checklistName: checklistToBeDeleted?.name,
+          deletedItemCount: itemsToDelete.length
+        }
+      );
       
       // Update state
       const updatedChecklists = checklists.filter(list => list.id !== checklistToDelete);
@@ -232,9 +307,17 @@ function App() {
                 onClick={(e) => setExportAnchorEl(e.currentTarget)}
                 disabled={items.length === 0}
                 endIcon={<ArrowDropDown />}
+                sx={{ mr: 1 }}
               >
                 Export
               </Button>
+              <IconButton 
+                color="inherit" 
+                onClick={() => setIsLogDrawerOpen(true)}
+                aria-label="view history"
+              >
+                <History />
+              </IconButton>
               <Menu
                 anchorEl={exportAnchorEl}
                 open={Boolean(exportAnchorEl)}
@@ -340,6 +423,23 @@ function App() {
           </Box>
         )}
       </Container>
+
+      {/* Activity Log Drawer */}
+      <Drawer
+        anchor="right"
+        open={isLogDrawerOpen}
+        onClose={() => setIsLogDrawerOpen(false)}
+      >
+        <Box sx={{ width: 350, p: 2 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+            <Typography variant="h6">History</Typography>
+            <IconButton onClick={() => setIsLogDrawerOpen(false)}>
+              <Close />
+            </IconButton>
+          </Box>
+          <LogViewer />
+        </Box>
+      </Drawer>
     </Box>
   );
 }

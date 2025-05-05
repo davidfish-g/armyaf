@@ -29,6 +29,11 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Update the editedItem whenever the item prop changes
+  React.useEffect(() => {
+    setEditedItem(item);
+  }, [item]);
+
   const handleStatusChange = (newStatus: 'pending' | 'verified' | 'issues') => {
     const updatedItem = { ...item, status: newStatus, lastUpdated: new Date() };
     onUpdate(updatedItem);
@@ -47,12 +52,23 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           photos: [...item.photos, photoUrl],
           lastUpdated: new Date()
         };
+        // We set a special action identifier by updating the onUpdate
         onUpdate(updatedItem);
       };
       reader.readAsDataURL(file);
     } catch (error) {
       console.error('Error capturing photo:', error);
     }
+  };
+
+  const handleDeletePhoto = (index: number) => {
+    const updatedPhotos = item.photos.filter((_, i) => i !== index);
+    const updatedItem = { 
+      ...item, 
+      photos: updatedPhotos,
+      lastUpdated: new Date() 
+    };
+    onUpdate(updatedItem);
   };
 
   const handleSave = () => {
@@ -79,7 +95,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
     <Card sx={{ mb: 2 }}>
       <CardContent>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-          <Typography variant="h6">{item.name}</Typography>
+          {/* Name removed: no longer present in item */}
           <Box>
             <input
               type="file"
@@ -221,10 +237,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                       right: 0,
                       backgroundColor: 'rgba(255, 255, 255, 0.8)'
                     }}
-                    onClick={() => {
-                      const updatedPhotos = item.photos.filter((_, i) => i !== index);
-                      onUpdate({ ...item, photos: updatedPhotos });
-                    }}
+                    onClick={() => handleDeletePhoto(index)}
                   >
                     <Delete fontSize="small" />
                   </IconButton>
