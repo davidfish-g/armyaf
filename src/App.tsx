@@ -108,7 +108,7 @@ function App() {
       <AppBar position="static">
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Military Inventory Management
+            Army AF
           </Typography>
           {items.length > 0 && (
             <>
@@ -135,9 +135,6 @@ function App() {
         {items.length === 0 ? (
           <Box sx={{ textAlign: 'center', mt: 4 }}>
             <Typography variant="h5" gutterBottom>
-              Welcome to Military Inventory Management
-            </Typography>
-            <Typography variant="body1" color="textSecondary" paragraph>
               Upload your inventory spreadsheet to get started
             </Typography>
             <FileUpload onFileUpload={handleFileUpload} />
