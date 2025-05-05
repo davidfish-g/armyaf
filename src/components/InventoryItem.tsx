@@ -28,6 +28,38 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   const [editedItem, setEditedItem] = useState(item);
   const [isPhotoDialogOpen, setIsPhotoDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+  };
+
+  React.useEffect(() => {
+    if (isPhotoDialogOpen) {
+      startCamera();
+    } else {
+      stopCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [isPhotoDialogOpen]);
 
   const handleStatusChange = (newStatus: 'pending' | 'verified' | 'issues') => {
     const updatedItem = { ...item, status: newStatus, lastUpdated: new Date() };
@@ -35,17 +67,14 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   };
 
   const handlePhotoCapture = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
+    if (!videoRef.current) return;
 
+    try {
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
       const ctx = canvas.getContext('2d');
-      ctx?.drawImage(video, 0, 0);
+      ctx?.drawImage(videoRef.current, 0, 0);
 
       const photoUrl = canvas.toDataURL('image/jpeg');
       const updatedItem = {
@@ -54,8 +83,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
         lastUpdated: new Date()
       };
       onUpdate(updatedItem);
-
-      stream.getTracks().forEach(track => track.stop());
       setIsPhotoDialogOpen(false);
     } catch (error) {
       console.error('Error capturing photo:', error);
@@ -214,16 +241,49 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
         )}
       </CardContent>
 
-      <Dialog open={isPhotoDialogOpen} onClose={() => setIsPhotoDialogOpen(false)}>
+      <Dialog 
+        open={isPhotoDialogOpen} 
+        onClose={() => setIsPhotoDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Take Photo</DialogTitle>
         <DialogContent>
+          <Box sx={{ 
+            position: 'relative',
+            width: '100%',
+            height: 0,
+            paddingBottom: '75%', // 4:3 aspect ratio
+            backgroundColor: '#000',
+            overflow: 'hidden',
+            borderRadius: 1,
+            mb: 2
+          }}>
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          </Box>
           <Typography variant="body2" color="textSecondary">
-            Click the button below to capture a photo using your device's camera.
+            Position your camera and click the capture button when ready.
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setIsPhotoDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handlePhotoCapture} variant="contained">
+          <Button 
+            onClick={handlePhotoCapture} 
+            variant="contained"
+            startIcon={<PhotoCamera />}
+          >
             Capture Photo
           </Button>
         </DialogActions>
