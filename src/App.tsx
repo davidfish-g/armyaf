@@ -9,38 +9,100 @@ import {
   CircularProgress,
   Menu,
   MenuItem,
-  IconButton
+  IconButton,
+  Tabs,
+  Tab,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
-import { db, InventoryItem as InventoryItemType } from './db/database';
+import { db, InventoryItem as InventoryItemType, Checklist } from './db/database';
 import { exportToSpreadsheet } from './utils/spreadsheetUtils';
-import { MoreVert } from '@mui/icons-material';
+import { Close, ArrowDropDown } from '@mui/icons-material';
 
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
   const [loading, setLoading] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
+  const [checklists, setChecklists] = useState<Checklist[]>([]);
+  const [activeChecklistId, setActiveChecklistId] = useState<number | null>(null);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [checklistToDelete, setChecklistToDelete] = useState<number | null>(null);
 
   useEffect(() => {
-    loadItems();
+    loadChecklists();
   }, []);
+
+  useEffect(() => {
+    if (activeChecklistId) {
+      loadItemsForChecklist(activeChecklistId);
+    }
+  }, [activeChecklistId]);
+
+  const loadChecklists = async () => {
+    try {
+      const lists = await db.checklists.toArray();
+      setChecklists(lists);
+      
+      // Select the first checklist if available and none is selected
+      if (lists.length > 0 && !activeChecklistId) {
+        setActiveChecklistId(lists[0].id!);
+      }
+    } catch (error) {
+      console.error('Error loading checklists:', error);
+    }
+  };
+
+  const loadItemsForChecklist = async (checklistId: number) => {
+    try {
+      const checklistItems = await db.items
+        .where('checklistId')
+        .equals(checklistId)
+        .toArray();
+      setItems(checklistItems);
+    } catch (error) {
+      console.error('Error loading items for checklist:', error);
+    }
+  };
 
   const loadItems = async () => {
     try {
-      const allItems = await db.items.toArray();
-      setItems(allItems);
+      if (activeChecklistId) {
+        await loadItemsForChecklist(activeChecklistId);
+      } else {
+        const allItems = await db.items.toArray();
+        setItems(allItems);
+      }
     } catch (error) {
       console.error('Error loading items:', error);
     }
   };
 
-  const handleFileUpload = async (newItems: InventoryItemType[]) => {
+  const handleFileUpload = async (newItems: InventoryItemType[], fileName: string) => {
     setLoading(true);
     try {
-      // Create a new checklist
+      // Use the uploaded file's name as the base name for the sheet
+      // Strip any invalid characters from the filename
+      const baseChecklistName = fileName.trim() || "Inventory";
+      let checklistName = baseChecklistName;
+      
+      // Count sheets with the same base name
+      const existingSheets = await db.checklists.toArray();
+      const similarSheets = existingSheets.filter(sheet => 
+        sheet.name === baseChecklistName || sheet.name.startsWith(`${baseChecklistName} (`)
+      );
+
+      // If we already have sheets with the same base name, add a number
+      if (similarSheets.length > 0) {
+        checklistName = `${baseChecklistName} (${similarSheets.length})`;
+      }
+
       const checklistId = await db.checklists.add({
-        name: `Inventory ${new Date().toLocaleString()}`,
+        name: checklistName,
         createdAt: new Date(),
         lastModified: new Date(),
         items: []
@@ -53,7 +115,9 @@ function App() {
       }));
 
       await db.items.bulkAdd(itemsWithChecklist);
-      await loadItems();
+      await loadChecklists();
+      setActiveChecklistId(checklistId);
+      setIsUploadDialogOpen(false);
     } catch (error) {
       console.error('Error saving items:', error);
     } finally {
@@ -90,7 +154,7 @@ function App() {
     }
   };
 
-  const handleExport = (format: 'xlsx' | 'csv') => {
+  const handleExport = (format: 'xlsx' | 'ods' | 'csv') => {
     const blob = exportToSpreadsheet(items, format);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -103,6 +167,50 @@ function App() {
     setExportAnchorEl(null);
   };
 
+  const handleChangeChecklist = (event: React.SyntheticEvent, newValue: number) => {
+    setActiveChecklistId(newValue);
+  };
+
+  const openDeleteDialog = (checklistId: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    setChecklistToDelete(checklistId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteChecklist = async () => {
+    if (!checklistToDelete) return;
+    
+    try {
+      // Delete all items associated with this checklist
+      await db.items
+        .where('checklistId')
+        .equals(checklistToDelete)
+        .delete();
+      
+      // Delete the checklist itself
+      await db.checklists.delete(checklistToDelete);
+      
+      // Update state
+      const updatedChecklists = checklists.filter(list => list.id !== checklistToDelete);
+      setChecklists(updatedChecklists);
+      
+      // If we deleted the active checklist, select another one
+      if (activeChecklistId === checklistToDelete) {
+        if (updatedChecklists.length > 0) {
+          setActiveChecklistId(updatedChecklists[0].id!);
+        } else {
+          setActiveChecklistId(null);
+          setItems([]);
+        }
+      }
+      
+      setDeleteDialogOpen(false);
+      setChecklistToDelete(null);
+    } catch (error) {
+      console.error('Error deleting checklist:', error);
+    }
+  };
+
   return (
     <Box sx={{ flexGrow: 1 }}>
       <AppBar position="static">
@@ -110,21 +218,31 @@ function App() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Army AF
           </Typography>
-          {items.length > 0 && (
+          {checklists.length > 0 && (
             <>
-              <IconButton
-                color="inherit"
-                onClick={(e: React.MouseEvent<HTMLButtonElement>) => setExportAnchorEl(e.currentTarget)}
+              <Button 
+                color="inherit" 
+                onClick={() => setIsUploadDialogOpen(true)}
+                sx={{ mr: 1 }}
               >
-                <MoreVert />
-              </IconButton>
+                Import
+              </Button>
+              <Button 
+                color="inherit" 
+                onClick={(e) => setExportAnchorEl(e.currentTarget)}
+                disabled={items.length === 0}
+                endIcon={<ArrowDropDown />}
+              >
+                Export
+              </Button>
               <Menu
                 anchorEl={exportAnchorEl}
                 open={Boolean(exportAnchorEl)}
                 onClose={() => setExportAnchorEl(null)}
               >
-                <MenuItem onClick={() => handleExport('xlsx')}>Export as Excel</MenuItem>
-                <MenuItem onClick={() => handleExport('csv')}>Export as CSV</MenuItem>
+                <MenuItem onClick={() => handleExport('xlsx')}>.xlsx</MenuItem>
+                <MenuItem onClick={() => handleExport('ods')}>.ods</MenuItem>
+                <MenuItem onClick={() => handleExport('csv')}>.csv</MenuItem>
               </Menu>
             </>
           )}
@@ -132,7 +250,7 @@ function App() {
       </AppBar>
 
       <Container maxWidth="md" sx={{ mt: 4 }}>
-        {items.length === 0 ? (
+        {checklists.length === 0 ? (
           <Box sx={{ textAlign: 'center', mt: 4 }}>
             <Typography variant="h5" gutterBottom>
               Upload your inventory spreadsheet to get started
@@ -141,9 +259,35 @@ function App() {
           </Box>
         ) : (
           <Box>
-            <Box sx={{ mb: 4 }}>
-              <FileUpload onFileUpload={handleFileUpload} />
+            {/* Sheet tabs */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+              <Tabs 
+                value={activeChecklistId} 
+                onChange={handleChangeChecklist}
+                variant="scrollable"
+                scrollButtons="auto"
+              >
+                {checklists.map(checklist => (
+                  <Tab 
+                    key={checklist.id} 
+                    label={
+                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                        {checklist.name}
+                        <IconButton 
+                          size="small"
+                          onClick={(e) => openDeleteDialog(checklist.id!, e)}
+                          sx={{ ml: 1 }}
+                        >
+                          <Close fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    }
+                    value={checklist.id} 
+                  />
+                ))}
+              </Tabs>
             </Box>
+
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
                 <CircularProgress />
@@ -160,6 +304,39 @@ function App() {
                 ))}
               </Box>
             )}
+
+            {/* New sheet upload dialog */}
+            <Dialog
+              open={isUploadDialogOpen}
+              onClose={() => setIsUploadDialogOpen(false)}
+              maxWidth="sm"
+              fullWidth
+            >
+              <DialogTitle>Import New Sheet</DialogTitle>
+              <DialogContent>
+                <FileUpload onFileUpload={handleFileUpload} />
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setIsUploadDialogOpen(false)}>Cancel</Button>
+              </DialogActions>
+            </Dialog>
+
+            {/* Delete confirmation dialog */}
+            <Dialog
+              open={deleteDialogOpen}
+              onClose={() => setDeleteDialogOpen(false)}
+            >
+              <DialogTitle>Delete Sheet</DialogTitle>
+              <DialogContent>
+                <Typography>
+                  Are you sure you want to delete this sheet? This action cannot be undone.
+                </Typography>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleDeleteChecklist} color="error">Delete</Button>
+              </DialogActions>
+            </Dialog>
           </Box>
         )}
       </Container>

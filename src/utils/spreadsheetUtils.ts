@@ -46,12 +46,12 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
   });
 };
 
-export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'csv' = 'xlsx'): Blob => {
+export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'csv' | 'ods' = 'xlsx'): Blob => {
   const worksheet = XLSX.utils.json_to_sheet(
     items.map(item => ({
-      'Name': item.name,
       ...item.customFields,
       'Status': item.status,
+      'Notes': item.notes || '',
       'Last Updated': item.lastUpdated.toLocaleString()
     }))
   );
@@ -67,6 +67,8 @@ export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'cs
   return new Blob([excelBuffer], { 
     type: format === 'xlsx' 
       ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      : format === 'ods'
+      ? 'application/vnd.oasis.opendocument.spreadsheet'
       : 'text/csv'
   });
 }; 

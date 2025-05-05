@@ -78,20 +78,9 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   return (
     <Card sx={{ mb: 2 }}>
       <CardContent>
-        <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
           <Typography variant="h6">{item.name}</Typography>
           <Box>
-            <Chip
-              label={item.status}
-              color={
-                item.status === 'verified'
-                  ? 'success'
-                  : item.status === 'issues'
-                  ? 'error'
-                  : 'default'
-              }
-              sx={{ mr: 1 }}
-            />
             <input
               type="file"
               accept="image/*"
@@ -103,15 +92,17 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
             <IconButton onClick={() => fileInputRef.current?.click()} sx={{ mr: 1 }}>
               <PhotoCamera />
             </IconButton>
-            <IconButton onClick={() => setIsDeleteDialogOpen(true)} color="error">
-              <Delete />
-            </IconButton>
+            {isEditing && (
+              <IconButton onClick={() => setIsDeleteDialogOpen(true)} color="error">
+                <Delete />
+              </IconButton>
+            )}
           </Box>
         </Box>
 
         {isEditing ? (
           <Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mt: 1 }}>
               {Object.entries(editedItem.customFields || {}).map(([field, value]) => (
                 <Box key={field}>
                   <TextField
@@ -119,12 +110,23 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                     label={field}
                     value={value}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCustomFieldChange(field, e.target.value)}
-                    margin="normal"
+                    margin="dense"
                   />
                 </Box>
               ))}
             </Box>
-            <Box mt={2}>
+            <Box mt={1}>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Notes"
+                value={editedItem.notes || ''}
+                onChange={(e) => setEditedItem(prev => ({ ...prev, notes: e.target.value }))}
+                margin="dense"
+              />
+            </Box>
+            <Box mt={1}>
               <Button variant="contained" onClick={handleSave} sx={{ mr: 1 }}>
                 Save
               </Button>
@@ -133,7 +135,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           </Box>
         ) : (
           <Box>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mt: 1 }}>
               {Object.entries(item.customFields || {}).map(([field, value]) => (
                 <Box key={field}>
                   <Typography variant="body2" color="textSecondary" gutterBottom>
@@ -142,7 +144,17 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                 </Box>
               ))}
             </Box>
-            <Box mt={2}>
+            {item.notes && (
+              <Box mt={1}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Notes:
+                </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {item.notes}
+                </Typography>
+              </Box>
+            )}
+            <Box mt={1}>
               <Button
                 variant="outlined"
                 onClick={() => setIsEditing(true)}
@@ -151,26 +163,34 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                 Edit
               </Button>
               <Button
-                variant="outlined"
-                color={item.status === 'verified' ? 'success' : 'inherit'}
-                onClick={() => handleStatusChange(item.status === 'verified' ? 'pending' : 'verified')}
+                variant={item.status === 'pending' ? 'contained' : 'outlined'}
+                color="inherit"
+                onClick={() => handleStatusChange('pending')}
                 sx={{ mr: 1 }}
               >
-                {item.status === 'verified' ? 'Mark Pending' : 'Mark Verified'}
+                Pending
               </Button>
               <Button
-                variant="outlined"
-                color={item.status === 'issues' ? 'error' : 'inherit'}
-                onClick={() => handleStatusChange(item.status === 'issues' ? 'pending' : 'issues')}
+                variant={item.status === 'verified' ? 'contained' : 'outlined'}
+                color="success"
+                onClick={() => handleStatusChange('verified')}
+                sx={{ mr: 1 }}
               >
-                {item.status === 'issues' ? 'Mark Pending' : 'Report Issues'}
+                Verified
+              </Button>
+              <Button
+                variant={item.status === 'issues' ? 'contained' : 'outlined'}
+                color="error"
+                onClick={() => handleStatusChange('issues')}
+              >
+                Issues
               </Button>
             </Box>
           </Box>
         )}
 
         {item.photos.length > 0 && (
-          <Box mt={2}>
+          <Box mt={1}>
             <Typography variant="subtitle2" gutterBottom>
               Photos:
             </Typography>
