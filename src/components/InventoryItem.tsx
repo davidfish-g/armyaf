@@ -117,7 +117,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                     fullWidth
                     label={field}
                     value={value}
-                    onChange={(e) => handleCustomFieldChange(field, e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCustomFieldChange(field, e.target.value)}
                     margin="normal"
                   />
                 </Box>

@@ -58,7 +58,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload }) => {
         variant="contained"
         color="primary"
         sx={{ mt: 2 }}
-        onClick={(e) => {
+        onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
           e.stopPropagation();
           open();
         }}

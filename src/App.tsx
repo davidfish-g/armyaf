@@ -114,7 +114,7 @@ function App() {
             <>
               <IconButton
                 color="inherit"
-                onClick={(e) => setExportAnchorEl(e.currentTarget)}
+                onClick={(e: React.MouseEvent<HTMLButtonElement>) => setExportAnchorEl(e.currentTarget)}
               >
                 <MoreVert />
               </IconButton>
