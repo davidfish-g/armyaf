@@ -26,64 +26,30 @@ interface InventoryItemProps {
 export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, onDelete }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedItem, setEditedItem] = useState(item);
-  const [isPhotoDialogOpen, setIsPhotoDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-    } catch (error) {
-      console.error('Error accessing camera:', error);
-    }
-  };
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach(track => track.stop());
-      setStream(null);
-    }
-  };
-
-  React.useEffect(() => {
-    if (isPhotoDialogOpen) {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-    return () => {
-      stopCamera();
-    };
-  }, [isPhotoDialogOpen]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const handleStatusChange = (newStatus: 'pending' | 'verified' | 'issues') => {
     const updatedItem = { ...item, status: newStatus, lastUpdated: new Date() };
     onUpdate(updatedItem);
   };
 
-  const handlePhotoCapture = async () => {
-    if (!videoRef.current) return;
+  const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
     try {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(videoRef.current, 0, 0);
-
-      const photoUrl = canvas.toDataURL('image/jpeg');
-      const updatedItem = {
-        ...item,
-        photos: [...item.photos, photoUrl],
-        lastUpdated: new Date()
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const photoUrl = e.target?.result as string;
+        const updatedItem = {
+          ...item,
+          photos: [...item.photos, photoUrl],
+          lastUpdated: new Date()
+        };
+        onUpdate(updatedItem);
       };
-      onUpdate(updatedItem);
-      setIsPhotoDialogOpen(false);
+      reader.readAsDataURL(file);
     } catch (error) {
       console.error('Error capturing photo:', error);
     }
@@ -126,7 +92,15 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
               }
               sx={{ mr: 1 }}
             />
-            <IconButton onClick={() => setIsPhotoDialogOpen(true)} sx={{ mr: 1 }}>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              style={{ display: 'none' }}
+              ref={fileInputRef}
+              onChange={handlePhotoCapture}
+            />
+            <IconButton onClick={() => fileInputRef.current?.click()} sx={{ mr: 1 }}>
               <PhotoCamera />
             </IconButton>
             <IconButton onClick={() => setIsDeleteDialogOpen(true)} color="error">
@@ -240,54 +214,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           </Box>
         )}
       </CardContent>
-
-      <Dialog 
-        open={isPhotoDialogOpen} 
-        onClose={() => setIsPhotoDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Take Photo</DialogTitle>
-        <DialogContent>
-          <Box sx={{ 
-            position: 'relative',
-            width: '100%',
-            height: 0,
-            paddingBottom: '75%', // 4:3 aspect ratio
-            backgroundColor: '#000',
-            overflow: 'hidden',
-            borderRadius: 1,
-            mb: 2
-          }}>
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover'
-              }}
-            />
-          </Box>
-          <Typography variant="body2" color="textSecondary">
-            Position your camera and click the capture button when ready.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setIsPhotoDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handlePhotoCapture} 
-            variant="contained"
-            startIcon={<PhotoCamera />}
-          >
-            Capture Photo
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <Dialog open={isDeleteDialogOpen} onClose={() => setIsDeleteDialogOpen(false)}>
         <DialogTitle>Delete Item</DialogTitle>
