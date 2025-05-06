@@ -14,7 +14,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Drawer
+  Drawer,
+  ThemeProvider
 } from '@mui/material';
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
@@ -23,6 +24,7 @@ import { db, InventoryItem as InventoryItemType } from './db/database';
 import { exportToSpreadsheet } from './utils/spreadsheetUtils';
 import { Close, ArrowDropDown, History } from '@mui/icons-material';
 import { logInventoryActivity, logItemUpdate } from './utils/logUtils';
+import theme from './theme';
 
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
@@ -157,110 +159,112 @@ function App() {
   };
 
   return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Army AF
-          </Typography>
-          <Button 
-            color="inherit" 
-            onClick={() => setIsUploadDialogOpen(true)}
-            sx={{ mr: 1 }}
-          >
-            Import
-          </Button>
-          <Button 
-            color="inherit" 
-            onClick={(e) => setExportAnchorEl(e.currentTarget)}
-            disabled={items.length === 0}
-            endIcon={<ArrowDropDown />}
-            sx={{ mr: 1 }}
-          >
-            Export
-          </Button>
-          <IconButton 
-            color="inherit" 
-            onClick={() => setIsLogDrawerOpen(true)}
-            aria-label="view history"
-          >
-            <History />
-          </IconButton>
-          <Menu
-            anchorEl={exportAnchorEl}
-            open={Boolean(exportAnchorEl)}
-            onClose={() => setExportAnchorEl(null)}
-          >
-            <MenuItem onClick={() => handleExport('xlsx')}>.xlsx</MenuItem>
-            <MenuItem onClick={() => handleExport('ods')}>.ods</MenuItem>
-            <MenuItem onClick={() => handleExport('csv')}>.csv</MenuItem>
-          </Menu>
-        </Toolbar>
-      </AppBar>
-
-      <Container maxWidth="md" sx={{ mt: 4 }}>
-        {items.length === 0 ? (
-          <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Typography variant="h5" gutterBottom>
-              Upload your inventory spreadsheet to get started
+    <ThemeProvider theme={theme}>
+      <Box sx={{ flexGrow: 1 }}>
+        <AppBar position="static">
+          <Toolbar>
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              Army AF
             </Typography>
-            <FileUpload onFileUpload={handleFileUpload} />
-          </Box>
-        ) : (
-          <Box>
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              <Box>
-                {items.map(item => (
-                  <InventoryItem
-                    key={item.id}
-                    item={item}
-                    onUpdate={handleItemUpdate}
-                    onDelete={() => item.id && handleItemDelete(item.id)}
-                  />
-                ))}
-              </Box>
-            )}
-
-            {/* Upload dialog */}
-            <Dialog
-              open={isUploadDialogOpen}
-              onClose={() => setIsUploadDialogOpen(false)}
-              maxWidth="sm"
-              fullWidth
+            <Button 
+              color="inherit" 
+              onClick={() => setIsUploadDialogOpen(true)}
+              sx={{ mr: 1 }}
             >
-              <DialogTitle>Import Items</DialogTitle>
-              <DialogContent>
-                <FileUpload onFileUpload={handleFileUpload} />
-              </DialogContent>
-              <DialogActions>
-                <Button onClick={() => setIsUploadDialogOpen(false)}>Cancel</Button>
-              </DialogActions>
-            </Dialog>
-          </Box>
-        )}
-      </Container>
-
-      {/* Activity Log Drawer */}
-      <Drawer
-        anchor="right"
-        open={isLogDrawerOpen}
-        onClose={() => setIsLogDrawerOpen(false)}
-      >
-        <Box sx={{ width: 350, p: 2 }}>
-          <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-            <Typography variant="h6">History</Typography>
-            <IconButton onClick={() => setIsLogDrawerOpen(false)}>
-              <Close />
+              Import
+            </Button>
+            <Button 
+              color="inherit" 
+              onClick={(e) => setExportAnchorEl(e.currentTarget)}
+              disabled={items.length === 0}
+              endIcon={<ArrowDropDown />}
+              sx={{ mr: 1 }}
+            >
+              Export
+            </Button>
+            <IconButton 
+              color="inherit" 
+              onClick={() => setIsLogDrawerOpen(true)}
+              aria-label="view history"
+            >
+              <History />
             </IconButton>
+            <Menu
+              anchorEl={exportAnchorEl}
+              open={Boolean(exportAnchorEl)}
+              onClose={() => setExportAnchorEl(null)}
+            >
+              <MenuItem onClick={() => handleExport('xlsx')}>.xlsx</MenuItem>
+              <MenuItem onClick={() => handleExport('ods')}>.ods</MenuItem>
+              <MenuItem onClick={() => handleExport('csv')}>.csv</MenuItem>
+            </Menu>
+          </Toolbar>
+        </AppBar>
+
+        <Container maxWidth="md" sx={{ mt: 4 }}>
+          {items.length === 0 ? (
+            <Box sx={{ textAlign: 'center', mt: 4 }}>
+              <Typography variant="h5" gutterBottom>
+                Upload your inventory spreadsheet to get started
+              </Typography>
+              <FileUpload onFileUpload={handleFileUpload} />
+            </Box>
+          ) : (
+            <Box>
+              {loading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Box>
+                  {items.map(item => (
+                    <InventoryItem
+                      key={item.id}
+                      item={item}
+                      onUpdate={handleItemUpdate}
+                      onDelete={() => item.id && handleItemDelete(item.id)}
+                    />
+                  ))}
+                </Box>
+              )}
+
+              {/* Upload dialog */}
+              <Dialog
+                open={isUploadDialogOpen}
+                onClose={() => setIsUploadDialogOpen(false)}
+                maxWidth="sm"
+                fullWidth
+              >
+                <DialogTitle>Import Items</DialogTitle>
+                <DialogContent>
+                  <FileUpload onFileUpload={handleFileUpload} />
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setIsUploadDialogOpen(false)}>Cancel</Button>
+                </DialogActions>
+              </Dialog>
+            </Box>
+          )}
+        </Container>
+
+        {/* Activity Log Drawer */}
+        <Drawer
+          anchor="right"
+          open={isLogDrawerOpen}
+          onClose={() => setIsLogDrawerOpen(false)}
+        >
+          <Box sx={{ width: 350, p: 2 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+              <Typography variant="h6">History</Typography>
+              <IconButton onClick={() => setIsLogDrawerOpen(false)}>
+                <Close />
+              </IconButton>
+            </Box>
+            <LogViewer />
           </Box>
-          <LogViewer />
-        </Box>
-      </Drawer>
-    </Box>
+        </Drawer>
+      </Box>
+    </ThemeProvider>
   );
 }
 
