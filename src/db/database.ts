@@ -31,7 +31,6 @@ export interface LogEntry {
   timestamp: Date;
   action: LogAction;
   itemId?: number;
-  details: string;
   changes?: Record<string, any>;
 }
 

@@ -117,7 +117,6 @@ function App() {
       await logInventoryActivity(
         'IMPORT',
         {},
-        `Imported ${newItems.length} items`,
         { importedCount: newItems.length }
       );
       
@@ -175,7 +174,6 @@ function App() {
       await logInventoryActivity(
         'DELETE',
         itemToDelete,
-        `Deleted item`,
         { 
           deletedItemFields: {
             name: itemToDelete.name,
@@ -208,7 +206,6 @@ function App() {
     await logInventoryActivity(
       'EXPORT',
       {},
-      `Exported ${items.length} items as ${format}`,
       { format, exportedCount: items.length }
     );
     
@@ -229,7 +226,6 @@ function App() {
       await logInventoryActivity(
         'ITEM_ADD',
         { ...itemToAdd, id },
-        `Added new item: ${itemToAdd.name}`,
         { itemFields: itemToAdd }
       );
       
@@ -445,7 +441,8 @@ function App() {
         >
           <Box sx={{ p: 2 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6">History</Typography>
+              <Box sx={{ flex: 1 }} />
+              <Typography variant="h6" sx={{ flex: 1 }}>History</Typography>
               <IconButton onClick={() => setIsLogDrawerOpen(false)}>
                 <Close />
               </IconButton>

@@ -12,7 +12,8 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableRow
+  TableRow,
+  Divider
 } from '@mui/material';
 import { ExpandMore, ExpandLess } from '@mui/icons-material';
 import { getLogs } from '../utils/logUtils';
@@ -103,16 +104,42 @@ export const LogViewer: React.FC = () => {
     }
   };
 
-  // Format date without seconds
-  const formatDate = (date: Date): string => {
+  // Format time only (without date)
+  const formatTime = (date: Date): string => {
     return new Date(date).toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
       hour: 'numeric',
       minute: 'numeric',
       hour12: true
     });
+  };
+
+  // Format date for group headers
+  const formatDateHeader = (date: Date): string => {
+    return new Date(date).toLocaleString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  // Group logs by date
+  const groupLogsByDate = (logs: LogEntry[]) => {
+    const groups: { [key: string]: LogEntry[] } = {};
+    
+    logs.forEach(log => {
+      const date = new Date(log.timestamp);
+      const dateKey = date.toDateString();
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(log);
+    });
+
+    return Object.entries(groups).sort(([dateA], [dateB]) => 
+      new Date(dateB).getTime() - new Date(dateA).getTime()
+    );
   };
 
   // Get summary text for the expanded view
@@ -175,11 +202,7 @@ export const LogViewer: React.FC = () => {
       );
     }
     
-    return (
-      <Typography variant="body2">
-        {log.details}
-      </Typography>
-    );
+    return null;
   };
 
   // Render changes in a user-friendly format
@@ -201,7 +224,15 @@ export const LogViewer: React.FC = () => {
 
     return (
       <Box mt={1}>
-        <Table size="small">
+        <Table size="small" sx={{ 
+          '& .MuiTableCell-root': { 
+            borderBottom: '1px solid rgba(224, 224, 224, 1)',
+            '&:first-of-type': { borderTop: 'none' }
+          },
+          '& .MuiTableBody-root .MuiTableRow-root:last-child .MuiTableCell-root': {
+            borderBottom: 'none'
+          }
+        }}>
           <TableBody>
             {Object.entries(changes).map(([key, value]) => {
               // Skip rendering some keys or complex objects
@@ -291,58 +322,73 @@ export const LogViewer: React.FC = () => {
         </Typography>
       ) : (
         <List disablePadding>
-          {logs.map((log, index) => (
-            <ListItem 
-              key={log.id || index} 
-              divider
-              sx={{ 
-                flexDirection: 'column', 
-                alignItems: 'flex-start',
-                py: 1
-              }}
-            >
-              <Box 
-                display="flex" 
-                width="100%" 
-                justifyContent="space-between" 
-                alignItems="center"
-              >
-                <Box>
-                  <Chip 
-                    label={formatActionLabel(log.action)} 
-                    size="small" 
-                    sx={{ 
-                      backgroundColor: getActionColor(log.action),
-                      color: 'white',
-                      '&:hover': {
-                        backgroundColor: getActionColor(log.action),
-                        opacity: 0.9
-                      }
-                    }}
-                  />
-                </Box>
-                <Box display="flex" alignItems="center">
-                  <Typography variant="caption" color="textSecondary" sx={{ mr: 1 }}>
-                    {formatDate(log.timestamp)}
-                  </Typography>
-                  <IconButton 
-                    size="small" 
-                    onClick={() => toggleExpand(index)}
-                    aria-expanded={expandedItems.has(index)}
-                    aria-label="show details"
+          {groupLogsByDate(logs).map(([dateKey, dateLogs]) => (
+            <React.Fragment key={dateKey}>
+              <ListItem sx={{ py: 1.5 }}>
+                <Typography 
+                  variant="subtitle1" 
+                  sx={{ 
+                    fontWeight: 500,
+                    color: 'text.primary'
+                  }}
+                >
+                  {formatDateHeader(new Date(dateKey))}
+                </Typography>
+              </ListItem>
+              <Divider />
+              {dateLogs.map((log, index) => (
+                <ListItem 
+                  key={log.id || index} 
+                  divider
+                  sx={{ 
+                    flexDirection: 'column', 
+                    alignItems: 'flex-start',
+                    py: 1
+                  }}
+                >
+                  <Box 
+                    display="flex" 
+                    width="100%" 
+                    justifyContent="space-between" 
+                    alignItems="center"
                   >
-                    {expandedItems.has(index) ? <ExpandLess /> : <ExpandMore />}
-                  </IconButton>
-                </Box>
-              </Box>
-              
-              <Collapse in={expandedItems.has(index)} timeout="auto" unmountOnExit sx={{ width: '100%' }}>
-                <Box sx={{ pl: 2, pr: 2, pt: 1, pb: 1, mt: 1, bgcolor: 'rgba(0, 0, 0, 0.03)' }}>
-                  {/* Show detailed changes if available */}
-                  {log.changes && renderChanges(log.changes, log.action)}
-                </Box>
-              </Collapse>
-            </ListItem>
+                    <Box>
+                      <Chip 
+                        label={formatActionLabel(log.action)} 
+                        size="small" 
+                        sx={{ 
+                          backgroundColor: getActionColor(log.action),
+                          color: 'white',
+                          '&:hover': {
+                            backgroundColor: getActionColor(log.action),
+                            opacity: 0.9
+                          }
+                        }}
+                      />
+                    </Box>
+                    <Box display="flex" alignItems="center">
+                      <Typography variant="caption" color="text.primary" sx={{ mr: 1 }}>
+                        {formatTime(log.timestamp)}
+                      </Typography>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => toggleExpand(index)}
+                        aria-expanded={expandedItems.has(index)}
+                        aria-label="show details"
+                      >
+                        {expandedItems.has(index) ? <ExpandLess /> : <ExpandMore />}
+                      </IconButton>
+                    </Box>
+                  </Box>
+                  
+                  <Collapse in={expandedItems.has(index)} timeout="auto" unmountOnExit sx={{ width: '100%' }}>
+                    <Box sx={{ pl: 2, pr: 2, pt: 1, pb: 1, mt: 1, bgcolor: 'rgba(0, 0, 0, 0.03)' }}>
+                      {log.changes && renderChanges(log.changes, log.action)}
+                    </Box>
+                  </Collapse>
+                </ListItem>
+              ))}
+            </React.Fragment>
           ))}
         </List>
       )}
