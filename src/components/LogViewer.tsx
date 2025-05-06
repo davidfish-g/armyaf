@@ -5,12 +5,10 @@ import {
   Paper,
   List,
   ListItem,
-  ListItemText,
   Chip,
   IconButton,
   Collapse,
   CircularProgress,
-  Divider,
   Table,
   TableBody,
   TableCell,
@@ -19,6 +17,21 @@ import {
 import { ExpandMore, ExpandLess } from '@mui/icons-material';
 import { getLogs } from '../utils/logUtils';
 import { LogEntry } from '../db/database';
+
+// Custom colors for each action type
+const actionColors = {
+  ITEM_ADD: '#4caf50',      // Green
+  DELETE: '#f44336',        // Red
+  EDIT: '#2196f3',          // Blue
+  IMPORT: '#00bcd4',        // Cyan
+  EXPORT: '#9c27b0',        // Purple
+  PHOTO_ADD: '#ff9800',     // Orange
+  PHOTO_DELETE: '#ff5722',  // Deep Orange
+  FLAGGED: '#d32f2f',       // Dark Red
+  UNFLAGGED: '#388e3c',     // Dark Green
+  VERIFIED: '#2e7d32',      // Darker Green
+  NOTES: '#795548',         // Brown
+} as const;
 
 export const LogViewer: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -67,29 +80,26 @@ export const LogViewer: React.FC = () => {
   
   // Get color based on action type
   const getActionColor = (action: string) => {
-    switch(action) {
-      case 'CREATE': return 'success';
-      case 'DELETE': return 'error';
-      case 'UPDATE': return 'primary';
-      case 'STATUS_CHANGE': return 'warning';
-      case 'PHOTO_ADD': 
-      case 'PHOTO_DELETE': return 'info';
-      case 'EXPORT': return 'secondary';
-      default: return 'default';
-    }
+    return actionColors[action as keyof typeof actionColors] || '#757575'; // Default to grey if action not found
   };
 
   // Format action label to be more user-friendly
   const formatActionLabel = (action: string): string => {
     switch(action) {
-      case 'CREATE': return 'Created';
+      case 'ITEM_ADD': return 'Item Added';
       case 'DELETE': return 'Deleted';
-      case 'UPDATE': return 'Updated';
-      case 'STATUS_CHANGE': return 'Status Changed';
+      case 'EDIT': return 'Edited';
+      case 'IMPORT': return 'Imported';
+      case 'EXPORT': return 'Exported';
       case 'PHOTO_ADD': return 'Photo Added';
       case 'PHOTO_DELETE': return 'Photo Removed';
-      case 'EXPORT': return 'Exported';
-      default: return action;
+      case 'FLAGGED': return 'Flagged';
+      case 'UNFLAGGED': return 'Unflagged';
+      case 'VERIFIED': return 'Verified';
+      case 'NOTES': return 'Notes';
+      default: return action.split('_').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ');
     }
   };
 
@@ -131,7 +141,7 @@ export const LogViewer: React.FC = () => {
       return <Typography variant="body2">Photo removed from item</Typography>;
     }
     
-    if (log.action === 'CREATE' && log.changes?.importedCount) {
+    if (log.action === 'IMPORT' && log.changes?.importedCount) {
       return (
         <Typography variant="body2">
           Imported {log.changes.importedCount} items
@@ -306,7 +316,14 @@ export const LogViewer: React.FC = () => {
                     <Chip 
                       label={formatActionLabel(log.action)} 
                       size="small" 
-                      color={getActionColor(log.action) as any}
+                      sx={{ 
+                        backgroundColor: getActionColor(log.action),
+                        color: 'white',
+                        '&:hover': {
+                          backgroundColor: getActionColor(log.action),
+                          opacity: 0.9
+                        }
+                      }}
                     />
                   </Box>
                   <Box display="flex" alignItems="center">

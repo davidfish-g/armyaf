@@ -14,15 +14,17 @@ export interface InventoryItem {
 }
 
 export type LogAction = 
-  | 'CREATE'
-  | 'UPDATE'
+  | 'ITEM_ADD'
+  | 'EDIT'
   | 'DELETE'
   | 'EXPORT'
+  | 'IMPORT'
   | 'PHOTO_ADD'
   | 'PHOTO_DELETE'
   | 'FLAGGED'
   | 'UNFLAGGED'
-  | 'VERIFIED';
+  | 'VERIFIED'
+  | 'NOTES';
 
 export interface LogEntry {
   id?: number;

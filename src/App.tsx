@@ -115,7 +115,7 @@ function App() {
       
       // Log the import of new items
       await logInventoryActivity(
-        'CREATE',
+        'IMPORT',
         {},
         `Imported ${newItems.length} items`,
         { importedCount: newItems.length }
@@ -227,7 +227,7 @@ function App() {
       
       // Log the creation
       await logInventoryActivity(
-        'CREATE',
+        'ITEM_ADD',
         { ...itemToAdd, id },
         `Added new item: ${itemToAdd.name}`,
         { itemFields: itemToAdd }
@@ -391,7 +391,11 @@ function App() {
                         <MenuItem value="lastUpdated">Last Updated</MenuItem>
                       </Select>
                     </FormControl>
-                    <IconButton onClick={toggleSortDirection} size="small">
+                    <IconButton 
+                      onClick={toggleSortDirection} 
+                      size="small"
+                      sx={{ ml: -1.5 }}
+                    >
                       {sortDirection === 'asc' ? <ArrowUpward /> : <ArrowDownward />}
                     </IconButton>
                     <StatsBox items={items} />

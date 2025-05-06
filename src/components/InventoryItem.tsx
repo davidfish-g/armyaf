@@ -94,7 +94,12 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   };
 
   const handleSave = () => {
-    onUpdate({ ...editedItem, lastUpdated: new Date() }, 'SAVED');
+    const updatedItem = {
+      ...item,
+      ...editedItem,
+      lastUpdated: new Date()
+    };
+    onUpdate(updatedItem, 'EDIT');
     setIsEditing(false);
   };
 
@@ -104,7 +109,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
       notes: editedNotes,
       lastUpdated: new Date()
     };
-    onUpdate(updatedItem, 'UPDATE');
+    onUpdate(updatedItem, 'NOTES');
     setIsEditingNotes(false);
   };
 
@@ -196,16 +201,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                 margin="dense"
               />
             </Box>
-            <TextField
-              fullWidth
-              label="Notes"
-              multiline
-              rows={4}
-              value={editedItem.notes || ''}
-              onChange={(e) => setEditedItem(prev => ({ ...prev, notes: e.target.value }))}
-              margin="dense"
-              placeholder="Add notes about this item..."
-            />
             <Box mt={1}>
               <Button variant="contained" onClick={handleSave} sx={{ mr: 1 }}>
                 Save
@@ -290,7 +285,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                       quantity: Math.max(0, item.quantity - 1),
                       lastUpdated: new Date()
                     };
-                    onUpdate(updatedItem, 'QUANTITY_UPDATED');
+                    onUpdate(updatedItem, 'EDIT');
                   }}
                 >
                   <Remove fontSize="small" />
@@ -306,7 +301,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                       quantity: item.quantity + 1,
                       lastUpdated: new Date()
                     };
-                    onUpdate(updatedItem, 'QUANTITY_UPDATED');
+                    onUpdate(updatedItem, 'EDIT');
                   }}
                 >
                   <Add fontSize="small" />

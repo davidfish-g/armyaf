@@ -39,7 +39,7 @@ export const logInventoryActivity = async (
 export const logItemUpdate = async (
   oldItem: InventoryItem,
   newItem: InventoryItem,
-  action: 'UPDATE' | 'PHOTO_ADD' | 'PHOTO_DELETE' | 'FLAGGED' | 'UNFLAGGED' | 'VERIFIED'
+  action: 'EDIT' | 'PHOTO_ADD' | 'PHOTO_DELETE' | 'FLAGGED' | 'UNFLAGGED' | 'VERIFIED'
 ): Promise<number> => {
   const changes: Record<string, any> = {};
   
