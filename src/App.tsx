@@ -17,16 +17,24 @@ import {
   Drawer,
   ThemeProvider,
   TextField,
-  Grid
+  Grid,
+  Select,
+  FormControl,
+  InputLabel,
+  SelectChangeEvent,
+  ToggleButton
 } from '@mui/material';
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
 import { LogViewer } from './components/LogViewer';
 import { db, InventoryItem as InventoryItemType } from './db/database';
 import { exportToSpreadsheet } from './utils/spreadsheetUtils';
-import { Close, ArrowDropDown, History } from '@mui/icons-material';
+import { Close, ArrowDropDown, History, ArrowUpward, ArrowDownward, Flag } from '@mui/icons-material';
 import { logInventoryActivity, logItemUpdate } from './utils/logUtils';
 import theme from './theme';
+
+type SortField = 'name' | 'lin' | 'nsn' | 'quantity' | 'lastVerified' | 'lastUpdated';
+type SortDirection = 'asc' | 'desc';
 
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
@@ -35,6 +43,9 @@ function App() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
   const [newItem, setNewItem] = useState<Partial<InventoryItemType>>({
     name: '',
     lin: '',
@@ -207,6 +218,40 @@ function App() {
     }
   };
 
+  const handleSortFieldChange = (event: SelectChangeEvent) => {
+    setSortField(event.target.value as SortField);
+  };
+
+  const toggleSortDirection = () => {
+    setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+  };
+
+  const getSortedItems = () => {
+    const filteredItems = showFlaggedOnly ? items.filter(item => item.isFlagged) : items;
+    return [...filteredItems].sort((a, b) => {
+      let comparison = 0;
+      
+      switch (sortField) {
+        case 'name':
+        case 'lin':
+        case 'nsn':
+          comparison = (a[sortField] || '').localeCompare(b[sortField] || '');
+          break;
+        case 'quantity':
+          comparison = (a[sortField] || 0) - (b[sortField] || 0);
+          break;
+        case 'lastVerified':
+        case 'lastUpdated':
+          const dateA = a[sortField] ? new Date(a[sortField]!).getTime() : 0;
+          const dateB = b[sortField] ? new Date(b[sortField]!).getTime() : 0;
+          comparison = dateA - dateB;
+          break;
+      }
+      
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ flexGrow: 1 }}>
@@ -273,7 +318,52 @@ function App() {
                 </Box>
               ) : (
                 <Box>
-                  {items.map(item => (
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
+                    <ToggleButton
+                      value="flagged"
+                      selected={showFlaggedOnly}
+                      onChange={() => setShowFlaggedOnly(!showFlaggedOnly)}
+                      size="small"
+                      sx={{
+                        height: '40px',
+                        borderWidth: '1px',
+                        borderStyle: 'solid',
+                        borderColor: 'rgba(0, 0, 0, 0.23)',
+                        backgroundColor: 'transparent',
+                        '&.Mui-selected': {
+                          backgroundColor: 'action.selected',
+                          '&:hover': {
+                            backgroundColor: 'action.selected',
+                          }
+                        },
+                        '&:hover': {
+                          borderColor: 'rgba(0, 0, 0, 0.87)',
+                          backgroundColor: 'transparent'
+                        }
+                      }}
+                    >
+                      <Flag color={showFlaggedOnly ? "error" : "action"} />
+                    </ToggleButton>
+                    <FormControl size="small" sx={{ minWidth: 200 }}>
+                      <InputLabel>Sort By</InputLabel>
+                      <Select
+                        value={sortField}
+                        label="Sort By"
+                        onChange={handleSortFieldChange}
+                      >
+                        <MenuItem value="name">Name</MenuItem>
+                        <MenuItem value="lin">LIN</MenuItem>
+                        <MenuItem value="nsn">NSN</MenuItem>
+                        <MenuItem value="quantity">Quantity</MenuItem>
+                        <MenuItem value="lastVerified">Last Verified</MenuItem>
+                        <MenuItem value="lastUpdated">Last Updated</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <IconButton onClick={toggleSortDirection} size="small">
+                      {sortDirection === 'asc' ? <ArrowUpward /> : <ArrowDownward />}
+                    </IconButton>
+                  </Box>
+                  {getSortedItems().map(item => (
                     <InventoryItem
                       key={item.id}
                       item={item}
