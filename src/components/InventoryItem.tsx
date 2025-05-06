@@ -130,9 +130,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
             <Typography variant="body2" color="textSecondary" gutterBottom>
               Quantity: {item.quantity}
             </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              Last Verified: {item.lastVerified ? new Date(item.lastVerified).toLocaleString() : 'Not verified'}
-            </Typography>
           </Box>
           <Box>
             <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
@@ -218,6 +215,11 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           </Box>
         ) : (
           <Box>
+            <Box mt={1} mb={2}>
+              <Typography variant="body2" color="textSecondary">
+                <strong>Last Verified:</strong> {item.lastVerified ? new Date(item.lastVerified).toLocaleString() : 'Not verified'}
+              </Typography>
+            </Box>
             {isEditingNotes ? (
               <Box mt={1} mb={2}>
                 <Typography variant="subtitle2" gutterBottom>
@@ -235,9 +237,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
               </Box>
             ) : item.notes ? (
               <Box mt={1} mb={2}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Notes:
-                </Typography>
                 <Typography 
                   variant="body2" 
                   color="textSecondary" 
@@ -248,7 +247,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                     maxWidth: '100%'
                   }}
                 >
-                  {item.notes}
+                  <strong>Notes:</strong> {item.notes}
                 </Typography>
               </Box>
             ) : null}
@@ -276,37 +275,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
               >
                 {isEditingNotes ? 'Save Notes' : 'Notes'}
               </Button>
-              <Box display="inline-flex" alignItems="center" sx={{ verticalAlign: 'middle' }}>
-                <IconButton 
-                  size="small" 
-                  onClick={() => {
-                    const updatedItem = {
-                      ...item,
-                      quantity: Math.max(0, item.quantity - 1),
-                      lastUpdated: new Date()
-                    };
-                    onUpdate(updatedItem, 'EDIT');
-                  }}
-                >
-                  <Remove fontSize="small" />
-                </IconButton>
-                <Typography sx={{ px: 1, minWidth: '2ch', textAlign: 'center' }}>
-                  {item.quantity}
-                </Typography>
-                <IconButton 
-                  size="small"
-                  onClick={() => {
-                    const updatedItem = {
-                      ...item,
-                      quantity: item.quantity + 1,
-                      lastUpdated: new Date()
-                    };
-                    onUpdate(updatedItem, 'EDIT');
-                  }}
-                >
-                  <Add fontSize="small" />
-                </IconButton>
-              </Box>
             </Box>
           </Box>
         )}
