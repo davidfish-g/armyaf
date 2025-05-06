@@ -22,7 +22,8 @@ import {
   FormControl,
   InputLabel,
   SelectChangeEvent,
-  ToggleButton
+  ToggleButton,
+  Autocomplete
 } from '@mui/material';
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
@@ -32,8 +33,21 @@ import { exportToSpreadsheet } from './utils/spreadsheetUtils';
 import { Close, ArrowDropDown, History, ArrowUpward, ArrowDownward, Flag } from '@mui/icons-material';
 import { logInventoryActivity, logItemUpdate } from './utils/logUtils';
 import theme from './theme';
+import { UI_OPTIONS, CONDITION_CODES, calculateQtyShort } from './utils/validationUtils';
 
-type SortField = 'name' | 'lin' | 'nsn' | 'quantity' | 'lastVerified' | 'lastUpdated';
+type SortField = 
+  | 'name' 
+  | 'lin' 
+  | 'nsn' 
+  | 'qtyAuthorized' 
+  | 'qtyOnHand' 
+  | 'qtyShort' 
+  | 'ui'
+  | 'serialNumber'
+  | 'conditionCode'
+  | 'documentNumber'
+  | 'lastVerified' 
+  | 'lastUpdated';
 type SortDirection = 'asc' | 'desc';
 type FilterType = 'all' | 'flagged' | 'unverified';
 
@@ -85,7 +99,13 @@ function App() {
     name: '',
     lin: '',
     nsn: '',
-    quantity: 1,
+    qtyAuthorized: 0,
+    qtyOnHand: 0,
+    qtyShort: 0,
+    ui: '',
+    serialNumber: '',
+    conditionCode: '',
+    documentNumber: '',
     notes: '',
     isFlagged: false,
     photos: [],
@@ -145,7 +165,13 @@ function App() {
           name: updatedItem.name,
           lin: updatedItem.lin,
           nsn: updatedItem.nsn,
-          quantity: updatedItem.quantity,
+          qtyAuthorized: updatedItem.qtyAuthorized,
+          qtyOnHand: updatedItem.qtyOnHand,
+          qtyShort: updatedItem.qtyShort,
+          ui: updatedItem.ui,
+          serialNumber: updatedItem.serialNumber,
+          conditionCode: updatedItem.conditionCode,
+          documentNumber: updatedItem.documentNumber,
           lastVerified: updatedItem.lastVerified
         });
         
@@ -179,7 +205,9 @@ function App() {
             name: itemToDelete.name,
             lin: itemToDelete.lin,
             nsn: itemToDelete.nsn,
-            quantity: itemToDelete.quantity
+            qtyAuthorized: itemToDelete.qtyAuthorized,
+            qtyOnHand: itemToDelete.qtyOnHand,
+            qtyShort: itemToDelete.qtyShort
           }
         }
       );
@@ -237,7 +265,13 @@ function App() {
         name: '',
         lin: '',
         nsn: '',
-        quantity: 1,
+        qtyAuthorized: 0,
+        qtyOnHand: 0,
+        qtyShort: 0,
+        ui: '',
+        serialNumber: '',
+        conditionCode: '',
+        documentNumber: '',
         notes: '',
         isFlagged: false,
         photos: [],
@@ -276,9 +310,15 @@ function App() {
         case 'name':
         case 'lin':
         case 'nsn':
+        case 'ui':
+        case 'serialNumber':
+        case 'conditionCode':
+        case 'documentNumber':
           comparison = (a[sortField] || '').localeCompare(b[sortField] || '');
           break;
-        case 'quantity':
+        case 'qtyAuthorized':
+        case 'qtyOnHand':
+        case 'qtyShort':
           comparison = (a[sortField] || 0) - (b[sortField] || 0);
           break;
         case 'lastVerified':
@@ -379,10 +419,16 @@ function App() {
                         label="Sort By"
                         onChange={handleSortFieldChange}
                       >
-                        <MenuItem value="name">Name</MenuItem>
+                        <MenuItem value="name">Nomenclature</MenuItem>
                         <MenuItem value="lin">LIN</MenuItem>
                         <MenuItem value="nsn">NSN</MenuItem>
-                        <MenuItem value="quantity">Quantity</MenuItem>
+                        <MenuItem value="qtyAuthorized">Quantity Authorized</MenuItem>
+                        <MenuItem value="qtyOnHand">Quantity On Hand</MenuItem>
+                        <MenuItem value="qtyShort">Quantity Short</MenuItem>
+                        <MenuItem value="ui">Unit of Issue</MenuItem>
+                        <MenuItem value="serialNumber">Serial Number</MenuItem>
+                        <MenuItem value="conditionCode">Condition Code</MenuItem>
+                        <MenuItem value="documentNumber">Document Number</MenuItem>
                         <MenuItem value="lastVerified">Last Verified</MenuItem>
                         <MenuItem value="lastUpdated">Last Updated</MenuItem>
                       </Select>
@@ -464,7 +510,7 @@ function App() {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Name"
+                  label="Nomenclature"
                   value={newItem.name}
                   onChange={(e) => setNewItem(prev => ({ ...prev, name: e.target.value }))}
                   margin="dense"
@@ -476,7 +522,7 @@ function App() {
                   fullWidth
                   label="LIN"
                   value={newItem.lin}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, lin: e.target.value }))}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, lin: e.target.value.toUpperCase() }))}
                   margin="dense"
                   required
                 />
@@ -492,15 +538,91 @@ function App() {
                 />
               </Grid>
               <Grid item xs={12}>
+                <Autocomplete
+                  options={UI_OPTIONS}
+                  getOptionLabel={(option) => `${option.code} - ${option.name}`}
+                  value={UI_OPTIONS.find(ui => ui.code === newItem.ui) || null}
+                  onChange={(_, newValue) => setNewItem(prev => ({ ...prev, ui: newValue?.code || '' }))}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Unit of Issue"
+                      margin="dense"
+                      required
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Quantity"
+                  label="Quantity Authorized"
                   type="number"
-                  value={newItem.quantity}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  value={newItem.qtyAuthorized}
+                  onChange={(e) => {
+                    const qtyAuthorized = Number(e.target.value);
+                    setNewItem(prev => ({
+                      ...prev,
+                      qtyAuthorized,
+                      qtyShort: calculateQtyShort(qtyAuthorized, prev.qtyOnHand || 0)
+                    }));
+                  }}
                   margin="dense"
                   required
-                  inputProps={{ min: 1 }}
+                  inputProps={{ min: 0 }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Quantity On Hand"
+                  type="number"
+                  value={newItem.qtyOnHand}
+                  onChange={(e) => {
+                    const qtyOnHand = Number(e.target.value);
+                    setNewItem(prev => ({
+                      ...prev,
+                      qtyOnHand,
+                      qtyShort: calculateQtyShort(prev.qtyAuthorized || 0, qtyOnHand)
+                    }));
+                  }}
+                  margin="dense"
+                  required
+                  inputProps={{ min: 0 }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Serial Number"
+                  value={newItem.serialNumber}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, serialNumber: e.target.value.toUpperCase() }))}
+                  margin="dense"
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <Autocomplete
+                  options={CONDITION_CODES}
+                  getOptionLabel={(option) => `${option.code} - ${option.description}`}
+                  value={CONDITION_CODES.find(cc => cc.code === newItem.conditionCode) || null}
+                  onChange={(_, newValue) => setNewItem(prev => ({ ...prev, conditionCode: newValue?.code || '' }))}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Condition Code"
+                      margin="dense"
+                      required
+                    />
+                  )}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Document Number"
+                  value={newItem.documentNumber}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, documentNumber: e.target.value }))}
+                  margin="dense"
                 />
               </Grid>
               <Grid item xs={12}>
@@ -521,7 +643,7 @@ function App() {
             <Button 
               onClick={handleAddItem}
               variant="contained"
-              disabled={!newItem.name || !newItem.lin || !newItem.nsn}
+              disabled={!newItem.name || !newItem.lin || !newItem.nsn || !newItem.ui || !newItem.conditionCode}
             >
               Add Item
             </Button>

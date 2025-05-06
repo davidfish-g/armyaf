@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { InventoryItem } from '../db/database';
+import { calculateQtyShort } from './validationUtils';
 
 export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
   return new Promise((resolve, reject) => {
@@ -14,15 +15,24 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
         const items: InventoryItem[] = jsonData.map((row: any) => {
+          const qtyAuthorized = Number(row['Qty Authorized']) || 0;
+          const qtyOnHand = Number(row['Qty On Hand']) || 0;
+          
           // Create a base item with required fields
           const item: InventoryItem = {
-            isFlagged: false, // Default to not flagged for new items
+            isFlagged: false,
             photos: [],
             lastUpdated: new Date(),
-            name: row['Name'] || row['ITEM'] || row['Item'] || '',
+            name: row['Nomenclature'] || row['Name'] || row['ITEM'] || row['Item'] || '',
             lin: row['LIN'] || '',
             nsn: row['NSN'] || '',
-            quantity: Number(row['Quantity']) || 0,
+            qtyAuthorized,
+            qtyOnHand,
+            qtyShort: calculateQtyShort(qtyAuthorized, qtyOnHand),
+            ui: row['UI'] || '',
+            serialNumber: row['Serial Number'] || '',
+            conditionCode: row['Condition Code'] || '',
+            documentNumber: row['Document Number'] || '',
             notes: row['Notes'] || '',
             lastVerified: row['Last Verified'] ? new Date(row['Last Verified']) : undefined
           };
@@ -44,10 +54,16 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
 export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'csv' | 'ods' = 'xlsx'): Blob => {
   const worksheet = XLSX.utils.json_to_sheet(
     items.map(item => ({
-      'Name': item.name,
+      'Nomenclature': item.name,
       'LIN': item.lin,
       'NSN': item.nsn,
-      'Quantity': item.quantity,
+      'Qty Authorized': item.qtyAuthorized,
+      'Qty On Hand': item.qtyOnHand,
+      'Qty Short': item.qtyShort,
+      'UI': item.ui,
+      'Serial Number': item.serialNumber,
+      'Condition Code': item.conditionCode,
+      'Document Number': item.documentNumber,
       'Notes': item.notes || '',
       'Flagged': item.isFlagged ? 'Yes' : 'No',
       'Last Verified': item.lastVerified ? item.lastVerified.toLocaleString() : '',

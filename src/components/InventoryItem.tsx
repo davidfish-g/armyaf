@@ -12,9 +12,22 @@ import {
   DialogContent,
   DialogActions,
   Divider,
+  Autocomplete,
+  FormHelperText,
 } from '@mui/material';
 import { PhotoCamera, Delete, Note, Edit, Flag, Add, Remove } from '@mui/icons-material';
 import { InventoryItem as InventoryItemType } from '../db/database';
+import { 
+  validateNSN, 
+  validateLIN, 
+  formatLIN, 
+  validateSerialNumber, 
+  formatSerialNumber, 
+  validateDocumentNumber,
+  UI_OPTIONS,
+  CONDITION_CODES,
+  calculateQtyShort
+} from '../utils/validationUtils';
 
 interface InventoryItemProps {
   item: InventoryItemType;
@@ -28,6 +41,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editedNotes, setEditedNotes] = useState(item.notes || '');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Function to check if item was verified within the last month
@@ -42,6 +56,57 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   React.useEffect(() => {
     setEditedItem(item);
   }, [item]);
+
+  const validateField = (field: string, value: any): string | null => {
+    switch (field) {
+      case 'nsn':
+        return validateNSN(value) ? null : 'Invalid NSN format (e.g., 1005-01-123-4567)';
+      case 'lin':
+        return validateLIN(value) ? null : 'LIN must be 1-6 alphanumeric characters';
+      case 'serialNumber':
+        return validateSerialNumber(value) ? null : 'Invalid serial number format';
+      case 'documentNumber':
+        return validateDocumentNumber(value) ? null : 'Invalid document number format';
+      case 'qtyAuthorized':
+      case 'qtyOnHand':
+        return value >= 0 ? null : 'Quantity must be 0 or greater';
+      default:
+        return null;
+    }
+  };
+
+  const handleFieldChange = (field: string, value: any) => {
+    let formattedValue = value;
+    
+    // Format values as needed
+    if (field === 'lin') {
+      formattedValue = formatLIN(value);
+    } else if (field === 'serialNumber') {
+      formattedValue = formatSerialNumber(value);
+    }
+
+    // Validate the field
+    const error = validateField(field, value);
+    setErrors(prev => ({
+      ...prev,
+      [field]: error || ''
+    }));
+
+    // Update the edited item
+    setEditedItem(prev => {
+      const updated = { ...prev, [field]: formattedValue };
+      
+      // Calculate qtyShort if either qtyAuthorized or qtyOnHand changes
+      if (field === 'qtyAuthorized' || field === 'qtyOnHand') {
+        updated.qtyShort = calculateQtyShort(
+          field === 'qtyAuthorized' ? formattedValue : updated.qtyAuthorized,
+          field === 'qtyOnHand' ? formattedValue : updated.qtyOnHand
+        );
+      }
+      
+      return updated;
+    });
+  };
 
   const handleVerify = () => {
     const updatedItem = { 
@@ -94,6 +159,10 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   };
 
   const handleSave = () => {
+    // Check for any validation errors
+    const hasErrors = Object.values(errors).some(error => error !== '');
+    if (hasErrors) return;
+
     const updatedItem = {
       ...item,
       ...editedItem,
@@ -122,13 +191,34 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
               {item.name || 'Unnamed Item'}
             </Typography>
             <Typography variant="body2" color="textSecondary" gutterBottom>
-              LIN: {item.lin}
+              <strong>LIN:</strong> {item.lin}
             </Typography>
             <Typography variant="body2" color="textSecondary" gutterBottom>
-              NSN: {item.nsn}
+              <strong>NSN:</strong> {item.nsn}
             </Typography>
             <Typography variant="body2" color="textSecondary" gutterBottom>
-              Quantity: {item.quantity}
+              <strong>Qty Authorized:</strong> {item.qtyAuthorized}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>Qty On Hand:</strong> {item.qtyOnHand}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>Qty Short:</strong> {item.qtyShort}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>UI:</strong> {item.ui}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>Serial Number:</strong> {item.serialNumber}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>Condition Code:</strong> {item.conditionCode}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>Document Number:</strong> {item.documentNumber}
+            </Typography>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              <strong>Last Verified:</strong> {item.lastVerified ? new Date(item.lastVerified).toLocaleDateString() : 'Not verified'}
             </Typography>
           </Box>
           <Box>
@@ -170,32 +260,110 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1, mt: 1 }}>
               <TextField
                 fullWidth
-                label="Name"
+                label="Nomenclature"
                 value={editedItem.name}
-                onChange={(e) => setEditedItem(prev => ({ ...prev, name: e.target.value }))}
+                onChange={(e) => handleFieldChange('name', e.target.value)}
                 margin="dense"
+                required
               />
               <TextField
                 fullWidth
                 label="LIN"
                 value={editedItem.lin}
-                onChange={(e) => setEditedItem(prev => ({ ...prev, lin: e.target.value }))}
+                onChange={(e) => handleFieldChange('lin', e.target.value)}
                 margin="dense"
+                required
+                error={!!errors.lin}
+                helperText={errors.lin}
               />
               <TextField
                 fullWidth
                 label="NSN"
                 value={editedItem.nsn}
-                onChange={(e) => setEditedItem(prev => ({ ...prev, nsn: e.target.value }))}
+                onChange={(e) => handleFieldChange('nsn', e.target.value)}
                 margin="dense"
+                required
+                error={!!errors.nsn}
+                helperText={errors.nsn}
+              />
+              <Autocomplete
+                options={UI_OPTIONS}
+                getOptionLabel={(option) => `${option.code} - ${option.name}`}
+                value={UI_OPTIONS.find(ui => ui.code === editedItem.ui) || null}
+                onChange={(_, newValue) => handleFieldChange('ui', newValue?.code || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Unit of Issue"
+                    margin="dense"
+                    required
+                  />
+                )}
               />
               <TextField
                 fullWidth
-                label="Quantity"
+                label="Quantity Authorized"
                 type="number"
-                value={editedItem.quantity}
-                onChange={(e) => setEditedItem(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                value={editedItem.qtyAuthorized}
+                onChange={(e) => handleFieldChange('qtyAuthorized', Number(e.target.value))}
                 margin="dense"
+                required
+                inputProps={{ min: 0 }}
+                error={!!errors.qtyAuthorized}
+                helperText={errors.qtyAuthorized}
+              />
+              <TextField
+                fullWidth
+                label="Quantity On Hand"
+                type="number"
+                value={editedItem.qtyOnHand}
+                onChange={(e) => handleFieldChange('qtyOnHand', Number(e.target.value))}
+                margin="dense"
+                required
+                inputProps={{ min: 0 }}
+                error={!!errors.qtyOnHand}
+                helperText={errors.qtyOnHand}
+              />
+              <TextField
+                fullWidth
+                label="Serial Number"
+                value={editedItem.serialNumber}
+                onChange={(e) => handleFieldChange('serialNumber', e.target.value)}
+                margin="dense"
+                error={!!errors.serialNumber}
+                helperText={errors.serialNumber}
+              />
+              <Autocomplete
+                options={CONDITION_CODES}
+                getOptionLabel={(option) => `${option.code} - ${option.description}`}
+                value={CONDITION_CODES.find(cc => cc.code === editedItem.conditionCode) || null}
+                onChange={(_, newValue) => handleFieldChange('conditionCode', newValue?.code || '')}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Condition Code"
+                    margin="dense"
+                    required
+                  />
+                )}
+              />
+              <TextField
+                fullWidth
+                label="Document Number"
+                value={editedItem.documentNumber}
+                onChange={(e) => handleFieldChange('documentNumber', e.target.value)}
+                margin="dense"
+                error={!!errors.documentNumber}
+                helperText={errors.documentNumber}
+              />
+              <TextField
+                fullWidth
+                label="Last Verified"
+                type="date"
+                value={editedItem.lastVerified ? new Date(editedItem.lastVerified).toISOString().split('T')[0] : ''}
+                onChange={(e) => handleFieldChange('lastVerified', new Date(e.target.value))}
+                margin="dense"
+                InputLabelProps={{ shrink: true }}
               />
             </Box>
             <Box mt={1}>
@@ -215,11 +383,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           </Box>
         ) : (
           <Box>
-            <Box mt={1} mb={2}>
-              <Typography variant="body2" color="textSecondary">
-                <strong>Last Verified:</strong> {item.lastVerified ? new Date(item.lastVerified).toLocaleString() : 'Not verified'}
-              </Typography>
-            </Box>
             {isEditingNotes ? (
               <Box mt={1} mb={2}>
                 <Typography variant="subtitle2" gutterBottom>

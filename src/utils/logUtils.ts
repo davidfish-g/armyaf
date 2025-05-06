@@ -95,10 +95,24 @@ export const logItemUpdate = async (
     };
   }
 
-  if (oldItem.quantity !== newItem.quantity) {
-    changes.quantity = {
-      from: oldItem.quantity,
-      to: newItem.quantity
+  if (oldItem.qtyAuthorized !== newItem.qtyAuthorized) {
+    changes.qtyAuthorized = {
+      from: oldItem.qtyAuthorized,
+      to: newItem.qtyAuthorized
+    };
+  }
+
+  if (oldItem.qtyOnHand !== newItem.qtyOnHand) {
+    changes.qtyOnHand = {
+      from: oldItem.qtyOnHand,
+      to: newItem.qtyOnHand
+    };
+  }
+
+  if (oldItem.qtyShort !== newItem.qtyShort) {
+    changes.qtyShort = {
+      from: oldItem.qtyShort,
+      to: newItem.qtyShort
     };
   }
 
@@ -119,7 +133,11 @@ export const logItemUpdate = async (
  */
 export const getLogs = async (limit = 100): Promise<LogEntry[]> => {
   try {
-    return await db.logs.orderBy('timestamp').reverse().limit(limit).toArray();
+    const logs = await db.logs.orderBy('timestamp').reverse().limit(limit).toArray();
+    return logs.map(log => ({
+      ...log,
+      action: log.action as LogAction
+    }));
   } catch (error) {
     console.error('Error fetching logs from IndexedDB:', error);
     return [];

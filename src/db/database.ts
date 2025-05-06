@@ -7,10 +7,16 @@ export interface InventoryItem {
   notes?: string;
   lastUpdated: Date;
   lastVerified?: Date;
-  name: string;
+  name: string;  // Will be renamed to nomenclature
   lin: string;
   nsn: string;
-  quantity: number;
+  ui: string;  // Unit of Issue
+  qtyAuthorized: number;
+  qtyOnHand: number;
+  qtyShort: number;
+  serialNumber: string;
+  conditionCode: string;
+  documentNumber: string;
 }
 
 export type LogAction = 
@@ -36,19 +42,18 @@ export interface LogEntry {
 
 export class InventoryDatabase extends Dexie {
   items!: Table<InventoryItem>;
-  logs!: Table<LogEntry>;
+  logs!: Table<{
+    id?: number;
+    timestamp: Date;
+    action: string;
+    itemId?: number;
+    changes?: Record<string, any>;
+  }>;
 
   constructor() {
     super('InventoryDB');
-    
-    // Define database schema for version 1
     this.version(1).stores({
-      items: '++id, status'
-    });
-    
-    // Upgrade to version 2: add logs table
-    this.version(2).stores({
-      items: '++id, status',
+      items: '++id, name, lin, nsn, isFlagged, lastUpdated, lastVerified',
       logs: '++id, timestamp, action, itemId'
     });
     
