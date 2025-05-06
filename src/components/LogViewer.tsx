@@ -201,9 +201,6 @@ export const LogViewer: React.FC = () => {
 
     return (
       <Box mt={1}>
-        <Typography variant="subtitle2" gutterBottom>
-          Changed Fields
-        </Typography>
         <Table size="small">
           <TableBody>
             {Object.entries(changes).map(([key, value]) => {
@@ -216,32 +213,32 @@ export const LogViewer: React.FC = () => {
               }
 
               if (key === 'photos') {
-                const photoChange = value as { old: number, new: number, added?: boolean };
+                const photoChange = value as { from: number, to: number };
                 return (
                   <TableRow key={key}>
                     <TableCell component="th" scope="row" sx={{ py: 0.5, fontWeight: 'medium' }}>
                       Photos
                     </TableCell>
                     <TableCell sx={{ py: 0.5 }}>
-                      {photoChange.added 
-                        ? `Added a new photo (total: ${photoChange.new})` 
-                        : `Removed a photo (remaining: ${photoChange.new})`}
+                      {photoChange.to > photoChange.from 
+                        ? `Added a new photo (total: ${photoChange.to})` 
+                        : `Removed a photo (remaining: ${photoChange.to})`}
                     </TableCell>
                   </TableRow>
                 );
               }
 
               if (key === 'notes') {
-                const notesChange = value as { old: string | undefined, new: string | undefined };
+                const notesChange = value as { from: string | undefined, to: string | undefined };
                 return (
                   <TableRow key={key}>
                     <TableCell component="th" scope="row" sx={{ py: 0.5, fontWeight: 'medium' }}>
                       Notes
                     </TableCell>
                     <TableCell sx={{ py: 0.5 }}>
-                      {notesChange.old === undefined || notesChange.old === '' 
+                      {!notesChange.from || notesChange.from === '' 
                         ? 'Added notes' 
-                        : notesChange.new === undefined || notesChange.new === '' 
+                        : !notesChange.to || notesChange.to === '' 
                           ? 'Removed notes' 
                           : 'Updated notes'}
                     </TableCell>
@@ -250,15 +247,14 @@ export const LogViewer: React.FC = () => {
               }
 
               // Default rendering for other fields
+              const fieldChange = value as { from: any, to: any };
               return (
                 <TableRow key={key}>
                   <TableCell component="th" scope="row" sx={{ py: 0.5, fontWeight: 'medium' }}>
-                    {key}
+                    {key.charAt(0).toUpperCase() + key.slice(1)}
                   </TableCell>
                   <TableCell sx={{ py: 0.5 }}>
-                    {typeof value === 'object' 
-                      ? JSON.stringify(value) 
-                      : value.toString()}
+                    {`${fieldChange.from} → ${fieldChange.to}`}
                   </TableCell>
                 </TableRow>
               );
@@ -294,66 +290,61 @@ export const LogViewer: React.FC = () => {
           No activity recorded yet.
         </Typography>
       ) : (
-        <Paper variant="outlined" sx={{ maxHeight: 400, overflow: 'auto' }}>
-          <List disablePadding>
-            {logs.map((log, index) => (
-              <ListItem 
-                key={log.id || index} 
-                divider
-                sx={{ 
-                  flexDirection: 'column', 
-                  alignItems: 'flex-start',
-                  py: 1
-                }}
+        <List disablePadding>
+          {logs.map((log, index) => (
+            <ListItem 
+              key={log.id || index} 
+              divider
+              sx={{ 
+                flexDirection: 'column', 
+                alignItems: 'flex-start',
+                py: 1
+              }}
+            >
+              <Box 
+                display="flex" 
+                width="100%" 
+                justifyContent="space-between" 
+                alignItems="center"
               >
-                <Box 
-                  display="flex" 
-                  width="100%" 
-                  justifyContent="space-between" 
-                  alignItems="center"
-                >
-                  <Box>
-                    <Chip 
-                      label={formatActionLabel(log.action)} 
-                      size="small" 
-                      sx={{ 
+                <Box>
+                  <Chip 
+                    label={formatActionLabel(log.action)} 
+                    size="small" 
+                    sx={{ 
+                      backgroundColor: getActionColor(log.action),
+                      color: 'white',
+                      '&:hover': {
                         backgroundColor: getActionColor(log.action),
-                        color: 'white',
-                        '&:hover': {
-                          backgroundColor: getActionColor(log.action),
-                          opacity: 0.9
-                        }
-                      }}
-                    />
-                  </Box>
-                  <Box display="flex" alignItems="center">
-                    <Typography variant="caption" color="textSecondary" sx={{ mr: 1 }}>
-                      {formatDate(log.timestamp)}
-                    </Typography>
-                    <IconButton 
-                      size="small" 
-                      onClick={() => toggleExpand(index)}
-                      aria-expanded={expandedItems.has(index)}
-                      aria-label="show details"
-                    >
-                      {expandedItems.has(index) ? <ExpandLess /> : <ExpandMore />}
-                    </IconButton>
-                  </Box>
+                        opacity: 0.9
+                      }
+                    }}
+                  />
                 </Box>
-                
-                <Collapse in={expandedItems.has(index)} timeout="auto" unmountOnExit sx={{ width: '100%' }}>
-                  <Box sx={{ pl: 2, pr: 2, pt: 1, pb: 1, mt: 1, bgcolor: 'rgba(0, 0, 0, 0.03)' }}>
-                    {/* First show a summary of what changed */}
-                    {getSummaryText(log)}
-                    
-                    {/* Then show detailed changes if available */}
-                    {log.changes && renderChanges(log.changes, log.action)}
-                  </Box>
-                </Collapse>
-              </ListItem>
-            ))}
-          </List>
-        </Paper>
+                <Box display="flex" alignItems="center">
+                  <Typography variant="caption" color="textSecondary" sx={{ mr: 1 }}>
+                    {formatDate(log.timestamp)}
+                  </Typography>
+                  <IconButton 
+                    size="small" 
+                    onClick={() => toggleExpand(index)}
+                    aria-expanded={expandedItems.has(index)}
+                    aria-label="show details"
+                  >
+                    {expandedItems.has(index) ? <ExpandLess /> : <ExpandMore />}
+                  </IconButton>
+                </Box>
+              </Box>
+              
+              <Collapse in={expandedItems.has(index)} timeout="auto" unmountOnExit sx={{ width: '100%' }}>
+                <Box sx={{ pl: 2, pr: 2, pt: 1, pb: 1, mt: 1, bgcolor: 'rgba(0, 0, 0, 0.03)' }}>
+                  {/* Show detailed changes if available */}
+                  {log.changes && renderChanges(log.changes, log.action)}
+                </Box>
+              </Collapse>
+            </ListItem>
+          ))}
+        </List>
       )}
     </Box>
   );

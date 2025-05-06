@@ -435,8 +435,15 @@ function App() {
           anchor="right"
           open={isLogDrawerOpen}
           onClose={() => setIsLogDrawerOpen(false)}
+          PaperProps={{
+            sx: {
+              width: 350,
+              height: '100%',
+              overflow: 'auto'
+            }
+          }}
         >
-          <Box sx={{ width: 350, p: 2 }}>
+          <Box sx={{ p: 2 }}>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
               <Typography variant="h6">History</Typography>
               <IconButton onClick={() => setIsLogDrawerOpen(false)}>
