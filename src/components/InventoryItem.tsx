@@ -30,6 +30,14 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   const [editedNotes, setEditedNotes] = useState(item.notes || '');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Function to check if item was verified within the last month
+  const isVerifiedWithinLastMonth = () => {
+    if (!item.lastVerified) return false;
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    return new Date(item.lastVerified) > oneMonthAgo;
+  };
+
   // Update the editedItem whenever the item prop changes
   React.useEffect(() => {
     setEditedItem(item);
@@ -251,12 +259,12 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
             ) : null}
             <Box mt={1}>
               <Button
-                variant="contained"
+                variant={isVerifiedWithinLastMonth() ? "contained" : "outlined"}
                 color="success"
                 onClick={handleVerify}
                 sx={{ mr: 1 }}
               >
-                Verify
+                {isVerifiedWithinLastMonth() ? "Verified" : "Verify"}
               </Button>
               <Button
                 variant="outlined"

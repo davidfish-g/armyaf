@@ -35,6 +35,7 @@ import theme from './theme';
 
 type SortField = 'name' | 'lin' | 'nsn' | 'quantity' | 'lastVerified' | 'lastUpdated';
 type SortDirection = 'asc' | 'desc';
+type FilterType = 'all' | 'flagged' | 'unverified';
 
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
@@ -45,7 +46,7 @@ function App() {
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
-  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
+  const [filterType, setFilterType] = useState<FilterType>('all');
   const [newItem, setNewItem] = useState<Partial<InventoryItemType>>({
     name: '',
     lin: '',
@@ -227,7 +228,17 @@ function App() {
   };
 
   const getSortedItems = () => {
-    const filteredItems = showFlaggedOnly ? items.filter(item => item.isFlagged) : items;
+    const filteredItems = items.filter(item => {
+      switch (filterType) {
+        case 'flagged':
+          return item.isFlagged;
+        case 'unverified':
+          return !item.lastVerified || new Date(item.lastVerified).getTime() < new Date().setMonth(new Date().getMonth() - 1);
+        default:
+          return true;
+      }
+    });
+
     return [...filteredItems].sort((a, b) => {
       let comparison = 0;
       
@@ -319,31 +330,18 @@ function App() {
               ) : (
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 2 }}>
-                    <ToggleButton
-                      value="flagged"
-                      selected={showFlaggedOnly}
-                      onChange={() => setShowFlaggedOnly(!showFlaggedOnly)}
-                      size="small"
-                      sx={{
-                        height: '40px',
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                        borderColor: 'rgba(0, 0, 0, 0.23)',
-                        backgroundColor: 'transparent',
-                        '&.Mui-selected': {
-                          backgroundColor: 'action.selected',
-                          '&:hover': {
-                            backgroundColor: 'action.selected',
-                          }
-                        },
-                        '&:hover': {
-                          borderColor: 'rgba(0, 0, 0, 0.87)',
-                          backgroundColor: 'transparent'
-                        }
-                      }}
-                    >
-                      <Flag color={showFlaggedOnly ? "error" : "action"} />
-                    </ToggleButton>
+                    <FormControl size="small" sx={{ minWidth: 150 }}>
+                      <InputLabel>Show</InputLabel>
+                      <Select
+                        value={filterType}
+                        label="Show"
+                        onChange={(e) => setFilterType(e.target.value as FilterType)}
+                      >
+                        <MenuItem value="all">All</MenuItem>
+                        <MenuItem value="flagged">Flagged</MenuItem>
+                        <MenuItem value="unverified">Unverified</MenuItem>
+                      </Select>
+                    </FormControl>
                     <FormControl size="small" sx={{ minWidth: 200 }}>
                       <InputLabel>Sort By</InputLabel>
                       <Select
