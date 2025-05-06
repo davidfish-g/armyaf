@@ -37,6 +37,40 @@ type SortField = 'name' | 'lin' | 'nsn' | 'quantity' | 'lastVerified' | 'lastUpd
 type SortDirection = 'asc' | 'desc';
 type FilterType = 'all' | 'flagged' | 'unverified';
 
+const StatsBox = ({ items }: { items: InventoryItemType[] }) => {
+  const totalItems = items.length;
+  const verifiedItems = items.filter(item => 
+    item.lastVerified && new Date(item.lastVerified).getTime() > new Date().setMonth(new Date().getMonth() - 1)
+  ).length;
+  const flaggedItems = items.filter(item => item.isFlagged).length;
+  const verifiedPercentage = totalItems > 0 ? Math.round((verifiedItems / totalItems) * 100) : 0;
+
+  return (
+    <Box
+      sx={{
+        minWidth: 200,
+        height: '40px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2,
+        px: 2,
+        border: '1px solid',
+        borderColor: 'rgba(0, 0, 0, 0.23)',
+        borderRadius: 1,
+        bgcolor: 'transparent',
+        ml: 'auto',
+        '&:hover': {
+          borderColor: 'rgba(0, 0, 0, 0.87)',
+        }
+      }}
+    >
+      <Typography variant="body2">Total: {totalItems}</Typography>
+      <Typography variant="body2">Verified: {verifiedItems} ({verifiedPercentage}%)</Typography>
+      <Typography variant="body2">Flagged: {flaggedItems}</Typography>
+    </Box>
+  );
+};
+
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
   const [loading, setLoading] = useState(false);
@@ -360,6 +394,7 @@ function App() {
                     <IconButton onClick={toggleSortDirection} size="small">
                       {sortDirection === 'asc' ? <ArrowUpward /> : <ArrowDownward />}
                     </IconButton>
+                    <StatsBox items={items} />
                   </Box>
                   {getSortedItems().map(item => (
                     <InventoryItem
