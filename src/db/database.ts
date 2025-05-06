@@ -2,11 +2,15 @@ import Dexie, { Table } from 'dexie';
 
 export interface InventoryItem {
   id?: number;
-  status: 'pending' | 'verified' | 'issues';
+  isFlagged: boolean;
   photos: string[];
   notes?: string;
   lastUpdated: Date;
-  customFields: Record<string, any>;
+  lastVerified?: Date;
+  name: string;
+  lin: string;
+  nsn: string;
+  quantity: number;
 }
 
 export type LogAction = 
@@ -16,7 +20,9 @@ export type LogAction =
   | 'EXPORT'
   | 'PHOTO_ADD'
   | 'PHOTO_DELETE'
-  | 'STATUS_CHANGE';
+  | 'FLAGGED'
+  | 'UNFLAGGED'
+  | 'VERIFIED';
 
 export interface LogEntry {
   id?: number;

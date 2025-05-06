@@ -39,15 +39,23 @@ export const logInventoryActivity = async (
 export const logItemUpdate = async (
   oldItem: InventoryItem,
   newItem: InventoryItem,
-  action: 'UPDATE' | 'STATUS_CHANGE' | 'PHOTO_ADD' | 'PHOTO_DELETE'
+  action: 'UPDATE' | 'PHOTO_ADD' | 'PHOTO_DELETE' | 'FLAGGED' | 'UNFLAGGED' | 'VERIFIED'
 ): Promise<number> => {
   const changes: Record<string, any> = {};
   
-  // Track status changes
-  if (oldItem.status !== newItem.status) {
-    changes.status = {
-      from: oldItem.status,
-      to: newItem.status
+  // Track flag changes
+  if (oldItem.isFlagged !== newItem.isFlagged) {
+    changes.isFlagged = {
+      from: oldItem.isFlagged,
+      to: newItem.isFlagged
+    };
+  }
+  
+  // Track last verified changes
+  if (oldItem.lastVerified?.getTime() !== newItem.lastVerified?.getTime()) {
+    changes.lastVerified = {
+      from: oldItem.lastVerified,
+      to: newItem.lastVerified
     };
   }
   
@@ -66,19 +74,35 @@ export const logItemUpdate = async (
       to: newItem.notes
     };
   }
-  
-  // Track custom field changes
-  const oldFields = oldItem.customFields || {};
-  const newFields = newItem.customFields || {};
-  
-  Object.keys({ ...oldFields, ...newFields }).forEach(key => {
-    if (oldFields[key] !== newFields[key]) {
-      changes[key] = {
-        from: oldFields[key],
-        to: newFields[key]
-      };
-    }
-  });
+
+  // Track hard-coded field changes
+  if (oldItem.name !== newItem.name) {
+    changes.name = {
+      from: oldItem.name,
+      to: newItem.name
+    };
+  }
+
+  if (oldItem.lin !== newItem.lin) {
+    changes.lin = {
+      from: oldItem.lin,
+      to: newItem.lin
+    };
+  }
+
+  if (oldItem.nsn !== newItem.nsn) {
+    changes.nsn = {
+      from: oldItem.nsn,
+      to: newItem.nsn
+    };
+  }
+
+  if (oldItem.quantity !== newItem.quantity) {
+    changes.quantity = {
+      from: oldItem.quantity,
+      to: newItem.quantity
+    };
+  }
   
   return logInventoryActivity(
     action,

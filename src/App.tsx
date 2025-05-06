@@ -15,7 +15,9 @@ import {
   DialogContent,
   DialogActions,
   Drawer,
-  ThemeProvider
+  ThemeProvider,
+  TextField,
+  Grid
 } from '@mui/material';
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
@@ -32,6 +34,17 @@ function App() {
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
+  const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
+  const [newItem, setNewItem] = useState<Partial<InventoryItemType>>({
+    name: '',
+    lin: '',
+    nsn: '',
+    quantity: 1,
+    notes: '',
+    isFlagged: false,
+    photos: [],
+    lastUpdated: new Date()
+  });
 
   useEffect(() => {
     loadItems();
@@ -40,6 +53,7 @@ function App() {
   const loadItems = async () => {
     try {
       const allItems = await db.items.toArray();
+      console.log('Loaded items:', allItems); // Debug log
       setItems(allItems);
     } catch (error) {
       console.error('Error loading items:', error);
@@ -49,6 +63,7 @@ function App() {
   const handleFileUpload = async (newItems: InventoryItemType[]) => {
     setLoading(true);
     try {
+      console.log('Uploading items:', newItems); // Debug log
       // Add items to database
       await db.items.bulkAdd(newItems);
       
@@ -69,41 +84,34 @@ function App() {
     }
   };
 
-  const handleItemUpdate = async (updatedItem: InventoryItemType) => {
+  const handleItemUpdate = async (updatedItem: InventoryItemType, action: string) => {
     try {
-      // Find the existing item before the update
-      const existingItem = items.find(item => item.id === updatedItem.id);
-      
-      if (!existingItem) {
-        console.error('Could not find item to update with id:', updatedItem.id);
-        return;
+      if (updatedItem.id) {
+        // Get the original item for comparison
+        const originalItem = items.find(item => item.id === updatedItem.id);
+        if (!originalItem) return;
+
+        // Update in IndexedDB
+        await db.items.update(updatedItem.id, {
+          isFlagged: updatedItem.isFlagged,
+          photos: updatedItem.photos,
+          notes: updatedItem.notes,
+          lastUpdated: updatedItem.lastUpdated,
+          name: updatedItem.name,
+          lin: updatedItem.lin,
+          nsn: updatedItem.nsn,
+          quantity: updatedItem.quantity,
+          lastVerified: updatedItem.lastVerified
+        });
+        
+        // Log the update with the specific action
+        await logItemUpdate(originalItem, updatedItem, action as any);
+        
+        // Update local state
+        setItems(items.map(item => 
+          item.id === updatedItem.id ? updatedItem : item
+        ));
       }
-      
-      await db.items.update(updatedItem.id!, {
-        status: updatedItem.status,
-        photos: updatedItem.photos,
-        notes: updatedItem.notes,
-        lastUpdated: updatedItem.lastUpdated,
-        customFields: updatedItem.customFields
-      });
-      
-      // Determine the type of update for logging
-      let action: 'UPDATE' | 'STATUS_CHANGE' | 'PHOTO_ADD' | 'PHOTO_DELETE' = 'UPDATE';
-      
-      if (existingItem.status !== updatedItem.status) {
-        action = 'STATUS_CHANGE';
-      } else if (existingItem.photos.length < updatedItem.photos.length) {
-        action = 'PHOTO_ADD';
-      } else if (existingItem.photos.length > updatedItem.photos.length) {
-        action = 'PHOTO_DELETE';
-      }
-      
-      // Log the changes
-      await logItemUpdate(existingItem, updatedItem, action);
-      
-      setItems(items.map(item =>
-        item.id === updatedItem.id ? updatedItem : item
-      ));
     } catch (error) {
       console.error('Error updating item:', error);
     }
@@ -111,14 +119,10 @@ function App() {
 
   const handleItemDelete = async (itemId: number) => {
     try {
-      // Get the item before deletion for logging
       const itemToDelete = items.find(item => item.id === itemId);
-      
-      if (!itemToDelete) {
-        console.error('Could not find item to delete with id:', itemId);
-        return;
-      }
-      
+      if (!itemToDelete) return;
+
+      // Delete from IndexedDB
       await db.items.delete(itemId);
       
       // Log the deletion
@@ -126,7 +130,14 @@ function App() {
         'DELETE',
         itemToDelete,
         `Deleted item`,
-        { deletedItemFields: itemToDelete.customFields }
+        { 
+          deletedItemFields: {
+            name: itemToDelete.name,
+            lin: itemToDelete.lin,
+            nsn: itemToDelete.nsn,
+            quantity: itemToDelete.quantity
+          }
+        }
       );
       
       setItems(items.filter(item => item.id !== itemId));
@@ -158,6 +169,44 @@ function App() {
     setExportAnchorEl(null);
   };
 
+  const handleAddItem = async () => {
+    try {
+      const itemToAdd: InventoryItemType = {
+        ...newItem as InventoryItemType,
+        lastUpdated: new Date()
+      };
+      
+      // Add to database
+      const id = await db.items.add(itemToAdd);
+      
+      // Log the creation
+      await logInventoryActivity(
+        'CREATE',
+        { ...itemToAdd, id },
+        `Added new item: ${itemToAdd.name}`,
+        { itemFields: itemToAdd }
+      );
+      
+      // Update local state
+      setItems([...items, { ...itemToAdd, id }]);
+      
+      // Reset form and close dialog
+      setNewItem({
+        name: '',
+        lin: '',
+        nsn: '',
+        quantity: 1,
+        notes: '',
+        isFlagged: false,
+        photos: [],
+        lastUpdated: new Date()
+      });
+      setIsAddItemDialogOpen(false);
+    } catch (error) {
+      console.error('Error adding item:', error);
+    }
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ flexGrow: 1 }}>
@@ -166,6 +215,13 @@ function App() {
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
               Army AF
             </Typography>
+            <Button 
+              color="inherit" 
+              onClick={() => setIsAddItemDialogOpen(true)}
+              sx={{ mr: 1 }}
+            >
+              Add Item
+            </Button>
             <Button 
               color="inherit" 
               onClick={() => setIsUploadDialogOpen(true)}
@@ -221,7 +277,7 @@ function App() {
                     <InventoryItem
                       key={item.id}
                       item={item}
-                      onUpdate={handleItemUpdate}
+                      onUpdate={(updatedItem, action) => handleItemUpdate(updatedItem, action)}
                       onDelete={() => item.id && handleItemDelete(item.id)}
                     />
                   ))}
@@ -263,6 +319,83 @@ function App() {
             <LogViewer />
           </Box>
         </Drawer>
+
+        {/* Add Item Dialog */}
+        <Dialog
+          open={isAddItemDialogOpen}
+          onClose={() => setIsAddItemDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Add New Item</DialogTitle>
+          <DialogContent>
+            <Grid container spacing={2} sx={{ mt: 0 }}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Name"
+                  value={newItem.name}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, name: e.target.value }))}
+                  margin="dense"
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="LIN"
+                  value={newItem.lin}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, lin: e.target.value }))}
+                  margin="dense"
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="NSN"
+                  value={newItem.nsn}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, nsn: e.target.value }))}
+                  margin="dense"
+                  required
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Quantity"
+                  type="number"
+                  value={newItem.quantity}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  margin="dense"
+                  required
+                  inputProps={{ min: 1 }}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Notes"
+                  value={newItem.notes}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, notes: e.target.value }))}
+                  margin="dense"
+                />
+              </Grid>
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setIsAddItemDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleAddItem}
+              variant="contained"
+              disabled={!newItem.name || !newItem.lin || !newItem.nsn}
+            >
+              Add Item
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </ThemeProvider>
   );

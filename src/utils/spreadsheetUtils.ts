@@ -16,19 +16,16 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
         const items: InventoryItem[] = jsonData.map((row: any) => {
           // Create a base item with required fields
           const item: InventoryItem = {
-            status: 'pending',
+            isFlagged: false, // Default to not flagged for new items
             photos: [],
             lastUpdated: new Date(),
-            // Store all other fields from the spreadsheet in a customFields object
-            customFields: {}
+            name: row['Name'] || row['ITEM'] || row['Item'] || '',
+            lin: row['LIN'] || '',
+            nsn: row['NSN'] || '',
+            quantity: Number(row['Quantity']) || 0,
+            notes: row['Notes'] || '',
+            lastVerified: row['Last Verified'] ? new Date(row['Last Verified']) : undefined
           };
-
-          // Add all other columns from the spreadsheet as custom fields
-          Object.keys(row).forEach(key => {
-            if (!['Name', 'ITEM', 'Item'].includes(key)) {
-              item.customFields[key] = row[key];
-            }
-          });
 
           return item;
         });
@@ -47,9 +44,13 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
 export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'csv' | 'ods' = 'xlsx'): Blob => {
   const worksheet = XLSX.utils.json_to_sheet(
     items.map(item => ({
-      ...item.customFields,
-      'Status': item.status,
+      'Name': item.name,
+      'LIN': item.lin,
+      'NSN': item.nsn,
+      'Quantity': item.quantity,
       'Notes': item.notes || '',
+      'Flagged': item.isFlagged ? 'Yes' : 'No',
+      'Last Verified': item.lastVerified ? item.lastVerified.toLocaleString() : '',
       'Last Updated': item.lastUpdated.toLocaleString()
     }))
   );

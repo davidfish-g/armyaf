@@ -107,11 +107,18 @@ export const LogViewer: React.FC = () => {
 
   // Get summary text for the expanded view
   const getSummaryText = (log: LogEntry): React.ReactNode => {
-    if (log.action === 'STATUS_CHANGE' && log.changes?.status) {
-      const { old, new: newStatus } = log.changes.status;
+    if (log.action === 'FLAGGED' || log.action === 'UNFLAGGED') {
       return (
         <Typography variant="body2">
-          Status changed from <strong>{old}</strong> to <strong>{newStatus}</strong>
+          Item {log.action === 'FLAGGED' ? 'flagged' : 'unflagged'}
+        </Typography>
+      );
+    }
+    
+    if (log.action === 'VERIFIED') {
+      return (
+        <Typography variant="body2">
+          Item verified
         </Typography>
       );
     }
@@ -167,11 +174,6 @@ export const LogViewer: React.FC = () => {
 
   // Render changes in a user-friendly format
   const renderChanges = (changes: Record<string, any>, action: string) => {
-    // For status changes, we already show the summary, so just show the fields
-    if (action === 'STATUS_CHANGE' && changes.status) {
-      return null;
-    }
-
     // For special cases like imports, exports, deletions, we already show in summary
     if (changes.importedCount || changes.deletedItemCount || 
         changes.exportedCount || changes.deletedItemFields) {
@@ -180,7 +182,7 @@ export const LogViewer: React.FC = () => {
 
     // For standard field changes, show a table of what changed
     const hasChangedFields = Object.keys(changes).some(key => 
-      key !== 'added' && (action !== 'STATUS_CHANGE' || key !== 'status')
+      key !== 'added' && (action !== 'FLAGGED' && action !== 'UNFLAGGED' && action !== 'VERIFIED')
     );
     
     if (!hasChangedFields) {
@@ -196,7 +198,10 @@ export const LogViewer: React.FC = () => {
           <TableBody>
             {Object.entries(changes).map(([key, value]) => {
               // Skip rendering some keys or complex objects
-              if (key === 'added' || (action === 'STATUS_CHANGE' && key === 'status')) {
+              if (key === 'added' || 
+                  (action === 'FLAGGED' && key === 'isFlagged') ||
+                  (action === 'UNFLAGGED' && key === 'isFlagged') ||
+                  (action === 'VERIFIED' && key === 'lastVerified')) {
                 return null;
               }
 
@@ -229,21 +234,6 @@ export const LogViewer: React.FC = () => {
                         : notesChange.new === undefined || notesChange.new === '' 
                           ? 'Removed notes' 
                           : 'Updated notes'}
-                    </TableCell>
-                  </TableRow>
-                );
-              }
-
-              if (key.startsWith('customField.')) {
-                const fieldName = key.replace('customField.', '');
-                const fieldChange = value as { old: any, new: any };
-                return (
-                  <TableRow key={key}>
-                    <TableCell component="th" scope="row" sx={{ py: 0.5, fontWeight: 'medium' }}>
-                      {fieldName}
-                    </TableCell>
-                    <TableCell sx={{ py: 0.5 }}>
-                      Changed from "{fieldChange.old || ''}" to "{fieldChange.new || ''}"
                     </TableCell>
                   </TableRow>
                 );
