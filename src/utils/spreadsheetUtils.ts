@@ -19,7 +19,6 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
             status: 'pending',
             photos: [],
             lastUpdated: new Date(),
-            checklistId: 0, // This will be set when creating the checklist
             // Store all other fields from the spreadsheet in a customFields object
             customFields: {}
           };

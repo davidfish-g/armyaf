@@ -16,7 +16,6 @@ export const logInventoryActivity = async (
     timestamp: new Date(),
     action,
     itemId: item.id,
-    checklistId: item.checklistId,
     details,
     changes
   };
@@ -35,63 +34,58 @@ export const logInventoryActivity = async (
 };
 
 /**
- * Helper to log item updates with changes detection
+ * Log an item update with detailed changes
  */
 export const logItemUpdate = async (
   oldItem: InventoryItem,
   newItem: InventoryItem,
-  action: LogAction = 'UPDATE'
-): Promise<void> => {
-  // Calculate what changed
+  action: 'UPDATE' | 'STATUS_CHANGE' | 'PHOTO_ADD' | 'PHOTO_DELETE'
+): Promise<number> => {
   const changes: Record<string, any> = {};
   
-  // Check status changes
+  // Track status changes
   if (oldItem.status !== newItem.status) {
-    changes.status = { old: oldItem.status, new: newItem.status };
-  }
-  
-  // Check notes changes
-  if (oldItem.notes !== newItem.notes) {
-    changes.notes = { old: oldItem.notes, new: newItem.notes };
-  }
-  
-  // Check custom fields changes
-  const oldFields = oldItem.customFields || {};
-  const newFields = newItem.customFields || {};
-  
-  // All unique keys from both old and new
-  const allKeys = new Set([...Object.keys(oldFields), ...Object.keys(newFields)]);
-  
-  allKeys.forEach(key => {
-    if (JSON.stringify(oldFields[key]) !== JSON.stringify(newFields[key])) {
-      changes[`customField.${key}`] = { old: oldFields[key], new: newFields[key] };
-    }
-  });
-  
-  // Check photo changes
-  if (oldItem.photos.length !== newItem.photos.length) {
-    changes.photos = { 
-      old: oldItem.photos.length, 
-      new: newItem.photos.length,
-      added: newItem.photos.length > oldItem.photos.length
+    changes.status = {
+      from: oldItem.status,
+      to: newItem.status
     };
   }
   
-  // Log if there were any changes
-  if (Object.keys(changes).length > 0) {
-    let details = 'Item updated';
-    
-    // Add more specific details if it's a specific type of update
-    if (action === 'STATUS_CHANGE') {
-      details = `Status changed from ${oldItem.status} to ${newItem.status}`;
-    } else if (action === 'PHOTO_ADD') {
-      details = 'Photo added to item';
-    } else if (action === 'PHOTO_DELETE') {
-      details = 'Photo removed from item';
-    }
-    
-    await logInventoryActivity(action, newItem, details, changes);
+  // Track photo changes
+  if (oldItem.photos.length !== newItem.photos.length) {
+    changes.photos = {
+      from: oldItem.photos.length,
+      to: newItem.photos.length
+    };
   }
+  
+  // Track notes changes
+  if (oldItem.notes !== newItem.notes) {
+    changes.notes = {
+      from: oldItem.notes,
+      to: newItem.notes
+    };
+  }
+  
+  // Track custom field changes
+  const oldFields = oldItem.customFields || {};
+  const newFields = newItem.customFields || {};
+  
+  Object.keys({ ...oldFields, ...newFields }).forEach(key => {
+    if (oldFields[key] !== newFields[key]) {
+      changes[key] = {
+        from: oldFields[key],
+        to: newFields[key]
+      };
+    }
+  });
+  
+  return logInventoryActivity(
+    action,
+    newItem,
+    `Updated item`,
+    changes
+  );
 };
 
 /**

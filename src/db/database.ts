@@ -6,16 +6,7 @@ export interface InventoryItem {
   photos: string[];
   notes?: string;
   lastUpdated: Date;
-  checklistId: number;
   customFields: Record<string, any>;
-}
-
-export interface Checklist {
-  id?: number;
-  name: string;
-  createdAt: Date;
-  lastModified: Date;
-  items: InventoryItem[];
 }
 
 export type LogAction = 
@@ -32,13 +23,11 @@ export interface LogEntry {
   timestamp: Date;
   action: LogAction;
   itemId?: number;
-  checklistId?: number;
   details: string;
   changes?: Record<string, any>;
 }
 
 export class InventoryDatabase extends Dexie {
-  checklists!: Table<Checklist>;
   items!: Table<InventoryItem>;
   logs!: Table<LogEntry>;
 
@@ -47,15 +36,13 @@ export class InventoryDatabase extends Dexie {
     
     // Define database schema for version 1
     this.version(1).stores({
-      checklists: '++id, name, createdAt, lastModified',
-      items:      '++id, status, checklistId'
+      items: '++id, status'
     });
     
     // Upgrade to version 2: add logs table
     this.version(2).stores({
-      checklists: '++id, name, createdAt, lastModified',
-      items:      '++id, status, checklistId',
-      logs:       '++id, timestamp, action, itemId, checklistId'
+      items: '++id, status',
+      logs: '++id, timestamp, action, itemId'
     });
     
     // Handle schema upgrade (e.g., data migrations)

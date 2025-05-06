@@ -6,13 +6,11 @@ import {
   TextField,
   Button,
   Box,
-  Chip,
   IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Grid
 } from '@mui/material';
 import { PhotoCamera, Delete } from '@mui/icons-material';
 import { InventoryItem as InventoryItemType } from '../db/database';
