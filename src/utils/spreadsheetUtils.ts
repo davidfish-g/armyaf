@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { InventoryItem } from '../db/database';
+import { InventoryItem, ItemInstance } from '../db/database';
 import { calculateQtyShort } from './validationUtils';
 
 // Field name mappings for import
@@ -81,6 +81,12 @@ const parseFlagValue = (value: any): boolean => {
   return false;
 };
 
+// Define the structure for parseSpreadsheet results
+interface ImportResult {
+  items: InventoryItem[];
+  instances: Map<number, ItemInstance[]>;
+}
+
 export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -97,7 +103,7 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
           const qtyAuthorized = Number(findFieldValue(row, FIELD_MAPPINGS.qtyAuthorized)) || 0;
           const qtyOnHand = Number(findFieldValue(row, FIELD_MAPPINGS.qtyOnHand)) || 0;
           
-          // Create a base item with required fields
+          // Create item with only the fields from InventoryItem interface
           const item: InventoryItem = {
             isFlagged: parseFlagValue(findFieldValue(row, FIELD_MAPPINGS.isFlagged)),
             photos: [],
@@ -108,12 +114,7 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
             qtyOnHand,
             qtyShort: calculateQtyShort(qtyAuthorized, qtyOnHand),
             ui: findFieldValue(row, FIELD_MAPPINGS.ui) || '',
-            serialNumber: findFieldValue(row, FIELD_MAPPINGS.serialNumber) || '',
-            conditionCode: findFieldValue(row, FIELD_MAPPINGS.conditionCode) || '',
-            location: findFieldValue(row, FIELD_MAPPINGS.location) || '',
-            notes: row['Notes'] || '',
-            lastVerified: findFieldValue(row, FIELD_MAPPINGS.lastVerified) ? 
-              new Date(findFieldValue(row, FIELD_MAPPINGS.lastVerified)) : undefined
+            notes: row['Notes'] || ''
           };
 
           return item;
@@ -130,9 +131,19 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
   });
 };
 
-export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'csv' | 'ods' = 'xlsx'): Blob => {
-  const worksheet = XLSX.utils.json_to_sheet(
-    items.map(item => ({
+export const exportToSpreadsheet = (
+  items: InventoryItem[], 
+  format: 'xlsx' | 'csv' | 'ods' = 'xlsx',
+  itemInstances?: Record<number, ItemInstance[]>
+): Blob => {
+  // Transform the data for export
+  const exportData = items.map(item => {
+    // Get the first instance if available (for backward compatibility)
+    const instances = itemInstances && item.id ? itemInstances[item.id] || [] : [];
+    const firstInstance = instances.length > 0 ? instances[0] : null;
+    
+    return {
+      // Item properties
       'Nomenclature': item.name,
       'LIN': item.lin,
       'NSN': item.nsn,
@@ -140,14 +151,19 @@ export const exportToSpreadsheet = (items: InventoryItem[], format: 'xlsx' | 'cs
       'Qty On Hand': item.qtyOnHand,
       'Qty Short': item.qtyShort,
       'UI': item.ui,
-      'Serial Number': item.serialNumber,
-      'Condition Code': item.conditionCode,
-      'Location': item.location,
       'Notes': item.notes || '',
       'Flagged': item.isFlagged ? 'Yes' : 'No',
-      'Last Verified': item.lastVerified ? item.lastVerified.toLocaleString() : ''
-    }))
-  );
+      
+      // Instance properties (if available)
+      'Serial Number': firstInstance?.serialNumber || '',
+      'Condition Code': firstInstance?.conditionCode || '',
+      'Location': firstInstance?.location || '',
+      'Last Verified': firstInstance?.lastVerified ? 
+        new Date(firstInstance.lastVerified).toLocaleString() : ''
+    };
+  });
+
+  const worksheet = XLSX.utils.json_to_sheet(exportData);
 
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');

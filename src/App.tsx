@@ -28,9 +28,9 @@ import {
 import { FileUpload } from './components/FileUpload';
 import { InventoryItem } from './components/InventoryItem';
 import { LogViewer } from './components/LogViewer';
-import { db, InventoryItem as InventoryItemType } from './db/database';
+import { db, InventoryItem as InventoryItemType, ItemInstance, LogAction } from './db/database';
 import { exportToSpreadsheet } from './utils/spreadsheetUtils';
-import { Close, ArrowDropDown, History, ArrowUpward, ArrowDownward, Flag } from '@mui/icons-material';
+import { Close, ArrowDropDown, History, ArrowUpward, ArrowDownward, Flag, Delete } from '@mui/icons-material';
 import { logInventoryActivity, logItemUpdate } from './utils/logUtils';
 import theme from './theme';
 import { UI_OPTIONS, CONDITION_CODES, calculateQtyShort } from './utils/validationUtils';
@@ -50,11 +50,26 @@ type SortField =
 type SortDirection = 'asc' | 'desc';
 type FilterType = 'all' | 'flagged' | 'unverified';
 
-const StatsBox = ({ items }: { items: InventoryItemType[] }) => {
+interface ItemWithInstances {
+  item: InventoryItemType;
+  instances: ItemInstance[];
+}
+
+const StatsBox = ({ items, instancesMap }: { items: InventoryItemType[], instancesMap: Record<number, ItemInstance[]> }) => {
   const totalItems = items.length;
-  const verifiedItems = items.filter(item => 
-    item.lastVerified && new Date(item.lastVerified).getTime() > new Date().setMonth(new Date().getMonth() - 1)
-  ).length;
+  
+  // Calculate how many items have at least one recently verified instance
+  const verifiedItems = items.filter(item => {
+    if (!item.id) return false;
+    const instances = instancesMap[item.id] || [];
+    return instances.some(instance => {
+      if (!instance.lastVerified) return false;
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      return new Date(instance.lastVerified) > oneMonthAgo;
+    });
+  }).length;
+  
   const flaggedItems = items.filter(item => item.isFlagged).length;
   const verifiedPercentage = totalItems > 0 ? Math.round((verifiedItems / totalItems) * 100) : 0;
 
@@ -86,6 +101,7 @@ const StatsBox = ({ items }: { items: InventoryItemType[] }) => {
 
 function App() {
   const [items, setItems] = useState<InventoryItemType[]>([]);
+  const [itemInstances, setItemInstances] = useState<Record<number, ItemInstance[]>>({});
   const [loading, setLoading] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
@@ -102,13 +118,11 @@ function App() {
     qtyOnHand: 0,
     qtyShort: 0,
     ui: '',
-    serialNumber: '',
-    conditionCode: '',
-    location: '',
     notes: '',
     isFlagged: false,
     photos: []
   });
+  const [newItemInstances, setNewItemInstances] = useState<Partial<ItemInstance>[]>([]);
 
   useEffect(() => {
     loadItems();
@@ -116,11 +130,25 @@ function App() {
 
   const loadItems = async () => {
     try {
+      setLoading(true);
       const allItems = await db.items.toArray();
-      console.log('Loaded items:', allItems); // Debug log
       setItems(allItems);
+      
+      // Load instances for all items
+      const instancesMap: Record<number, ItemInstance[]> = {};
+      
+      for (const item of allItems) {
+        if (item.id) {
+          const instances = await db.instances.where('parentItemId').equals(item.id).toArray();
+          instancesMap[item.id] = instances;
+        }
+      }
+      
+      setItemInstances(instancesMap);
+      setLoading(false);
     } catch (error) {
       console.error('Error loading items:', error);
+      setLoading(false);
     }
   };
 
@@ -165,15 +193,16 @@ function App() {
           qtyAuthorized: updatedItem.qtyAuthorized,
           qtyOnHand: updatedItem.qtyOnHand,
           qtyShort: updatedItem.qtyShort,
-          ui: updatedItem.ui,
-          serialNumber: updatedItem.serialNumber,
-          conditionCode: updatedItem.conditionCode,
-          location: updatedItem.location,
-          lastVerified: updatedItem.lastVerified
+          ui: updatedItem.ui
         });
         
         // Log the update with the specific action
-        await logItemUpdate(originalItem, updatedItem, action as any);
+        if (action === 'EDIT' || action === 'PHOTO_ADD' || action === 'PHOTO_DELETE' || 
+            action === 'FLAGGED' || action === 'UNFLAGGED' || action === 'VERIFIED') {
+          await logItemUpdate(originalItem, updatedItem, action as any);
+        } else {
+          await logInventoryActivity(action as LogAction, updatedItem, {});
+        }
         
         // Update local state
         setItems(items.map(item => 
@@ -189,6 +218,16 @@ function App() {
     try {
       const itemToDelete = items.find(item => item.id === itemId);
       if (!itemToDelete) return;
+
+      // Delete all instances associated with this item first
+      if (itemInstances[itemId]) {
+        // Delete each instance from the database
+        for (const instance of itemInstances[itemId]) {
+          if (instance.id) {
+            await db.instances.delete(instance.id);
+          }
+        }
+      }
 
       // Delete from IndexedDB
       await db.items.delete(itemId);
@@ -209,14 +248,143 @@ function App() {
         }
       );
       
+      // Update local state
       setItems(items.filter(item => item.id !== itemId));
+      
+      // Remove instances from state
+      const updatedInstances = {...itemInstances};
+      delete updatedInstances[itemId];
+      setItemInstances(updatedInstances);
     } catch (error) {
       console.error('Error deleting item:', error);
     }
   };
 
+  const handleInstanceAdd = async (instance: ItemInstance) => {
+    try {
+      // Add to database
+      const id = await db.instances.add(instance);
+      
+      // Log the creation
+      await logInventoryActivity(
+        'INSTANCE_ADD',
+        {},
+        { 
+          instanceId: id,
+          parentItemId: instance.parentItemId,
+          fields: instance 
+        }
+      );
+      
+      // Update local state
+      const newInstance = { ...instance, id };
+      setItemInstances(prev => {
+        const parentId = instance.parentItemId;
+        const parentInstances = prev[parentId] || [];
+        return {
+          ...prev,
+          [parentId]: [...parentInstances, newInstance]
+        };
+      });
+    } catch (error) {
+      console.error('Error adding instance:', error);
+    }
+  };
+
+  const handleInstanceUpdate = async (updatedInstance: ItemInstance, actionType: string) => {
+    try {
+      if (updatedInstance.id) {
+        const parentId = updatedInstance.parentItemId;
+        
+        // Find the original instance for comparison
+        const originalInstance = itemInstances[parentId]?.find(
+          instance => instance.id === updatedInstance.id
+        );
+        
+        if (!originalInstance) return;
+
+        // Update in IndexedDB
+        await db.instances.update(updatedInstance.id, updatedInstance);
+        
+        // Convert string action to LogAction type
+        const action = actionType as LogAction;
+        
+        // Log the update
+        await logInventoryActivity(
+          action,
+          {},
+          { 
+            instanceId: updatedInstance.id,
+            parentItemId: parentId,
+            changes: {
+              before: originalInstance,
+              after: updatedInstance
+            }
+          }
+        );
+        
+        // Update local state
+        setItemInstances(prev => {
+          const instances = prev[parentId] || [];
+          return {
+            ...prev,
+            [parentId]: instances.map(instance => 
+              instance.id === updatedInstance.id ? updatedInstance : instance
+            )
+          };
+        });
+      }
+    } catch (error) {
+      console.error('Error updating instance:', error);
+    }
+  };
+
+  const handleInstanceDelete = async (instanceId: number) => {
+    try {
+      // Find the instance
+      let parentId: number | undefined;
+      let instanceToDelete: ItemInstance | undefined;
+      
+      for (const [itemId, instances] of Object.entries(itemInstances)) {
+        const instance = instances.find(i => i.id === instanceId);
+        if (instance) {
+          parentId = Number(itemId);
+          instanceToDelete = instance;
+          break;
+        }
+      }
+      
+      if (!parentId || !instanceToDelete) return;
+      
+      // Delete from IndexedDB
+      await db.instances.delete(instanceId);
+      
+      // Log the deletion
+      await logInventoryActivity(
+        'INSTANCE_DELETE',
+        {},
+        { 
+          instanceId: instanceId,
+          parentItemId: parentId,
+          deletedInstanceFields: instanceToDelete
+        }
+      );
+      
+      // Update local state
+      setItemInstances(prev => {
+        const instances = prev[parentId!] || [];
+        return {
+          ...prev,
+          [parentId!]: instances.filter(instance => instance.id !== instanceId)
+        };
+      });
+    } catch (error) {
+      console.error('Error deleting instance:', error);
+    }
+  };
+
   const handleExport = async (format: 'xlsx' | 'ods' | 'csv') => {
-    const blob = exportToSpreadsheet(items, format);
+    const blob = exportToSpreadsheet(items, format, itemInstances);
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -239,22 +407,56 @@ function App() {
 
   const handleAddItem = async () => {
     try {
+      // Create a complete item object
       const itemToAdd: InventoryItemType = {
         ...newItem as InventoryItemType
       };
       
       // Add to database
       const id = await db.items.add(itemToAdd);
+      const itemWithId = { ...itemToAdd, id };
       
       // Log the creation
       await logInventoryActivity(
         'ITEM_ADD',
-        { ...itemToAdd, id },
+        itemWithId,
         { itemFields: itemToAdd }
       );
       
       // Update local state
-      setItems([...items, { ...itemToAdd, id }]);
+      setItems([...items, itemWithId]);
+      
+      // Add any instances
+      const newInstances: ItemInstance[] = [];
+      for (const instance of newItemInstances) {
+        if (instance.serialNumber && instance.conditionCode) {
+          const fullInstance: ItemInstance = {
+            ...instance as ItemInstance,
+            parentItemId: id
+          };
+          
+          const instanceId = await db.instances.add(fullInstance);
+          newInstances.push({...fullInstance, id: instanceId});
+          
+          // Log instance creation
+          await logInventoryActivity(
+            'INSTANCE_ADD',
+            {},
+            { 
+              instanceId,
+              parentItemId: id,
+              fields: fullInstance 
+            }
+          );
+        }
+      }
+      
+      if (newInstances.length > 0) {
+        setItemInstances(prev => ({
+          ...prev,
+          [id]: newInstances
+        }));
+      }
       
       // Reset form and close dialog
       setNewItem({
@@ -265,17 +467,38 @@ function App() {
         qtyOnHand: 0,
         qtyShort: 0,
         ui: '',
-        serialNumber: '',
-        conditionCode: '',
-        location: '',
         notes: '',
         isFlagged: false,
         photos: []
       });
+      setNewItemInstances([]);
       setIsAddItemDialogOpen(false);
     } catch (error) {
       console.error('Error adding item:', error);
     }
+  };
+
+  const handleAddNewItemInstance = () => {
+    setNewItemInstances([...newItemInstances, {
+      serialNumber: '',
+      location: '',
+      conditionCode: ''
+    }]);
+  };
+
+  const handleUpdateNewItemInstance = (index: number, field: string, value: any) => {
+    const updatedInstances = [...newItemInstances];
+    updatedInstances[index] = { 
+      ...updatedInstances[index], 
+      [field]: field === 'serialNumber' ? value.toUpperCase() : value 
+    };
+    setNewItemInstances(updatedInstances);
+  };
+
+  const handleRemoveNewItemInstance = (index: number) => {
+    const updatedInstances = [...newItemInstances];
+    updatedInstances.splice(index, 1);
+    setNewItemInstances(updatedInstances);
   };
 
   const handleSortFieldChange = (event: SelectChangeEvent) => {
@@ -292,7 +515,17 @@ function App() {
         case 'flagged':
           return item.isFlagged;
         case 'unverified':
-          return !item.lastVerified || new Date(item.lastVerified).getTime() < new Date().setMonth(new Date().getMonth() - 1);
+          // An item is considered unverified if it has no instances or none of them have been verified recently
+          if (!item.id) return true;
+          const instances = itemInstances[item.id] || [];
+          if (instances.length === 0) return true;
+          
+          return !instances.some(instance => {
+            if (!instance.lastVerified) return false;
+            const oneMonthAgo = new Date();
+            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+            return new Date(instance.lastVerified) > oneMonthAgo;
+          });
         default:
           return true;
       }
@@ -301,28 +534,37 @@ function App() {
     return [...filteredItems].sort((a, b) => {
       let comparison = 0;
       
-      switch (sortField) {
-        case 'name':
-        case 'lin':
-        case 'nsn':
-        case 'ui':
-        case 'serialNumber':
-        case 'conditionCode':
-        case 'location':
-          const valueA = String(a[sortField] || '');
-          const valueB = String(b[sortField] || '');
-          comparison = valueA.localeCompare(valueB);
-          break;
-        case 'qtyAuthorized':
-        case 'qtyOnHand':
-        case 'qtyShort':
-          comparison = (a[sortField] || 0) - (b[sortField] || 0);
-          break;
-        case 'lastVerified':
-          const dateA = a[sortField] ? new Date(a[sortField]!).getTime() : 0;
-          const dateB = b[sortField] ? new Date(b[sortField]!).getTime() : 0;
-          comparison = dateA - dateB;
-          break;
+      // Fields that are on the InventoryItem
+      const itemFields = ['name', 'lin', 'nsn', 'ui', 'qtyAuthorized', 'qtyOnHand', 'qtyShort'];
+      
+      // Fields that are on ItemInstance
+      const instanceFields = ['serialNumber', 'conditionCode', 'location', 'lastVerified'];
+      
+      if (itemFields.includes(sortField)) {
+        // Sort by fields on the item
+        if (['name', 'lin', 'nsn', 'ui'].includes(sortField)) {
+          comparison = String(a[sortField as keyof InventoryItemType] || '').localeCompare(
+            String(b[sortField as keyof InventoryItemType] || '')
+          );
+        } else {
+          comparison = (a[sortField as keyof InventoryItemType] as number || 0) - 
+                      (b[sortField as keyof InventoryItemType] as number || 0);
+        }
+      } else if (instanceFields.includes(sortField)) {
+        // Sort by fields on the instance (use the first instance if it exists)
+        const aInstances = a.id ? itemInstances[a.id] || [] : [];
+        const bInstances = b.id ? itemInstances[b.id] || [] : [];
+        
+        const aValue = aInstances.length > 0 ? aInstances[0][sortField as keyof ItemInstance] : null;
+        const bValue = bInstances.length > 0 ? bInstances[0][sortField as keyof ItemInstance] : null;
+        
+        if (sortField === 'lastVerified') {
+          const aDate = aValue ? new Date(aValue as string).getTime() : 0;
+          const bDate = bValue ? new Date(bValue as string).getTime() : 0;
+          comparison = aDate - bDate;
+        } else {
+          comparison = String(aValue || '').localeCompare(String(bValue || ''));
+        }
       }
       
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -435,14 +677,18 @@ function App() {
                     >
                       {sortDirection === 'asc' ? <ArrowUpward /> : <ArrowDownward />}
                     </IconButton>
-                    <StatsBox items={items} />
+                    <StatsBox items={items} instancesMap={itemInstances} />
                   </Box>
                   {getSortedItems().map(item => (
                     <InventoryItem
                       key={item.id}
                       item={item}
+                      instances={item.id ? itemInstances[item.id] || [] : []}
                       onUpdate={(updatedItem, action) => handleItemUpdate(updatedItem, action)}
                       onDelete={() => item.id && handleItemDelete(item.id)}
+                      onInstanceAdd={handleInstanceAdd}
+                      onInstanceUpdate={handleInstanceUpdate}
+                      onInstanceDelete={handleInstanceDelete}
                     />
                   ))}
                 </Box>
@@ -496,13 +742,16 @@ function App() {
         <Dialog
           open={isAddItemDialogOpen}
           onClose={() => setIsAddItemDialogOpen(false)}
-          maxWidth="sm"
+          maxWidth="md"
           fullWidth
         >
           <DialogTitle>Add New Item</DialogTitle>
           <DialogContent>
             <Grid container spacing={2} sx={{ mt: 0 }}>
               <Grid item xs={12}>
+                <Typography variant="subtitle1" gutterBottom>Item Details</Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="Nomenclature"
@@ -512,7 +761,7 @@ function App() {
                   required
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="LIN"
@@ -522,7 +771,7 @@ function App() {
                   required
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
                   label="NSN"
@@ -532,7 +781,7 @@ function App() {
                   required
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={6}>
                 <Autocomplete
                   options={UI_OPTIONS}
                   getOptionLabel={(option) => `${option.code} - ${option.name}`}
@@ -548,7 +797,7 @@ function App() {
                   )}
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
                   label="Quantity Authorized"
@@ -567,7 +816,7 @@ function App() {
                   inputProps={{ min: 0 }}
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
                   label="Quantity On Hand"
@@ -586,39 +835,14 @@ function App() {
                   inputProps={{ min: 0 }}
                 />
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Serial Number"
-                  value={newItem.serialNumber}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, serialNumber: e.target.value.toUpperCase() }))}
+                  label="Quantity Short"
+                  type="number"
+                  value={newItem.qtyShort}
+                  InputProps={{ readOnly: true }}
                   margin="dense"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <Autocomplete
-                  options={CONDITION_CODES}
-                  getOptionLabel={(option) => `${option.code} - ${option.description}`}
-                  value={CONDITION_CODES.find(cc => cc.code === newItem.conditionCode) || null}
-                  onChange={(_, newValue) => setNewItem(prev => ({ ...prev, conditionCode: newValue?.code || '' }))}
-                  renderInput={(params) => (
-                    <TextField
-                      {...params}
-                      label="Condition Code"
-                      margin="dense"
-                      required
-                    />
-                  )}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Location"
-                  value={newItem.location}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, location: e.target.value }))}
-                  margin="dense"
-                  placeholder="Enter item location"
                 />
               </Grid>
               <Grid item xs={12}>
@@ -632,6 +856,77 @@ function App() {
                   margin="dense"
                 />
               </Grid>
+              
+              <Grid item xs={12} sx={{ mt: 2 }}>
+                <Box display="flex" justifyContent="space-between" alignItems="center">
+                  <Typography variant="subtitle1">Item Instances</Typography>
+                  <Button 
+                    variant="contained" 
+                    size="small" 
+                    onClick={handleAddNewItemInstance}
+                  >
+                    Add Instance
+                  </Button>
+                </Box>
+              </Grid>
+              
+              {newItemInstances.map((instance, index) => (
+                <Grid item xs={12} key={index}>
+                  <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, mb: 1 }}>
+                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                      <Typography variant="subtitle2">Instance #{index + 1}</Typography>
+                      <IconButton 
+                        size="small" 
+                        color="error"
+                        onClick={() => handleRemoveNewItemInstance(index)}
+                      >
+                        <Delete fontSize="small" />
+                      </IconButton>
+                    </Box>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth
+                          label="Serial Number"
+                          value={instance.serialNumber}
+                          onChange={(e) => handleUpdateNewItemInstance(index, 'serialNumber', e.target.value)}
+                          margin="dense"
+                          required
+                          size="small"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <TextField
+                          fullWidth
+                          label="Location"
+                          value={instance.location}
+                          onChange={(e) => handleUpdateNewItemInstance(index, 'location', e.target.value)}
+                          margin="dense"
+                          size="small"
+                        />
+                      </Grid>
+                      <Grid item xs={12} sm={4}>
+                        <Autocomplete
+                          size="small"
+                          options={CONDITION_CODES}
+                          getOptionLabel={(option) => `${option.code} - ${option.description}`}
+                          value={CONDITION_CODES.find(cc => cc.code === instance.conditionCode) || null}
+                          onChange={(_, newValue) => handleUpdateNewItemInstance(index, 'conditionCode', newValue?.code || '')}
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              label="Condition Code"
+                              margin="dense"
+                              required
+                              size="small"
+                            />
+                          )}
+                        />
+                      </Grid>
+                    </Grid>
+                  </Box>
+                </Grid>
+              ))}
             </Grid>
           </DialogContent>
           <DialogActions>
@@ -639,7 +934,7 @@ function App() {
             <Button 
               onClick={handleAddItem}
               variant="contained"
-              disabled={!newItem.name || !newItem.lin || !newItem.nsn || !newItem.ui || !newItem.conditionCode}
+              disabled={!newItem.name || !newItem.lin || !newItem.nsn || !newItem.ui}
             >
               Add Item
             </Button>

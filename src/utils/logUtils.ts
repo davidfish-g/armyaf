@@ -49,13 +49,8 @@ export const logItemUpdate = async (
     };
   }
   
-  // Track last verified changes
-  if (oldItem.lastVerified?.getTime() !== newItem.lastVerified?.getTime()) {
-    changes.lastVerified = {
-      from: oldItem.lastVerified,
-      to: newItem.lastVerified
-    };
-  }
+  // lastVerified is now on ItemInstance, not on InventoryItem
+  // Verification is now tracked per instance
   
   // Track photo changes
   if (oldItem.photos.length !== newItem.photos.length) {

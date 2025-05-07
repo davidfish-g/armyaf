@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -14,9 +14,27 @@ import {
   Divider,
   Autocomplete,
   FormHelperText,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
 } from '@mui/material';
-import { PhotoCamera, Delete, Note, Edit, Flag, Add, Remove } from '@mui/icons-material';
-import { InventoryItem as InventoryItemType } from '../db/database';
+import { 
+  PhotoCamera, 
+  Delete, 
+  Note, 
+  Edit, 
+  Flag, 
+  Add, 
+  Remove, 
+  CheckCircle,
+  Warning 
+} from '@mui/icons-material';
+import { InventoryItem as InventoryItemType, ItemInstance, db } from '../db/database';
 import { 
   validateNSN, 
   validateLIN, 
@@ -30,31 +48,51 @@ import {
 
 interface InventoryItemProps {
   item: InventoryItemType;
+  instances: ItemInstance[];
   onUpdate: (updatedItem: InventoryItemType, action: string) => void;
   onDelete: () => void;
+  onInstanceAdd: (instance: ItemInstance) => void;
+  onInstanceUpdate: (instance: ItemInstance, action: string) => void;
+  onInstanceDelete: (instanceId: number) => void;
 }
 
-export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, onDelete }) => {
+export const InventoryItem: React.FC<InventoryItemProps> = ({ 
+  item, 
+  instances, 
+  onUpdate, 
+  onDelete, 
+  onInstanceAdd,
+  onInstanceUpdate,
+  onInstanceDelete
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedItem, setEditedItem] = useState(item);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
   const [editedNotes, setEditedNotes] = useState(item.notes || '');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isAddInstanceDialogOpen, setIsAddInstanceDialogOpen] = useState(false);
+  const [instanceToEdit, setInstanceToEdit] = useState<ItemInstance | null>(null);
+  const [newInstance, setNewInstance] = useState<Partial<ItemInstance>>({
+    parentItemId: item.id || 0,
+    serialNumber: '',
+    location: '',
+    conditionCode: ''
+  });
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Function to check if item was verified within the last month
-  const isVerifiedWithinLastMonth = () => {
-    if (!item.lastVerified) return false;
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    return new Date(item.lastVerified) > oneMonthAgo;
-  };
-
   // Update the editedItem whenever the item prop changes
-  React.useEffect(() => {
+  useEffect(() => {
     setEditedItem(item);
   }, [item]);
+
+  // Function to check if instance was verified within the last month
+  const isInstanceVerifiedRecently = (instance: ItemInstance) => {
+    if (!instance.lastVerified) return false;
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    return new Date(instance.lastVerified) > oneMonthAgo;
+  };
 
   const validateField = (field: string, value: any): string | null => {
     switch (field) {
@@ -105,20 +143,43 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
     });
   };
 
-  const handleVerify = () => {
-    const updatedItem = { 
-      ...item, 
-      lastVerified: new Date(),
-      lastUpdated: new Date()
+  const handleInstanceFieldChange = (field: string, value: any) => {
+    let formattedValue = value;
+    
+    // Format values as needed
+    if (field === 'serialNumber') {
+      formattedValue = formatSerialNumber(value);
+    }
+
+    // Validate the field
+    const error = validateField(field, value);
+    setErrors(prev => ({
+      ...prev,
+      [field]: error || ''
+    }));
+
+    if (instanceToEdit) {
+      setInstanceToEdit(prev => {
+        if (!prev) return null;
+        return { ...prev, [field]: formattedValue };
+      });
+    } else {
+      setNewInstance(prev => ({ ...prev, [field]: formattedValue }));
+    }
+  };
+
+  const handleVerifyInstance = (instance: ItemInstance) => {
+    const updatedInstance = { 
+      ...instance, 
+      lastVerified: new Date() 
     };
-    onUpdate(updatedItem, 'VERIFIED');
+    onInstanceUpdate(updatedInstance, 'VERIFIED');
   };
 
   const handleFlagToggle = () => {
     const updatedItem = { 
       ...item, 
-      isFlagged: !item.isFlagged,
-      lastUpdated: new Date()
+      isFlagged: !item.isFlagged
     };
     onUpdate(updatedItem, item.isFlagged ? 'UNFLAGGED' : 'FLAGGED');
   };
@@ -133,11 +194,9 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
         const photoUrl = e.target?.result as string;
         const updatedItem = {
           ...item,
-          photos: [...item.photos, photoUrl],
-          lastUpdated: new Date()
+          photos: [...item.photos, photoUrl]
         };
-        // We set a special action identifier by updating the onUpdate
-        onUpdate(updatedItem, 'PHOTO_CAPTURED');
+        onUpdate(updatedItem, 'PHOTO_ADD');
       };
       reader.readAsDataURL(file);
     } catch (error) {
@@ -149,10 +208,9 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
     const updatedPhotos = item.photos.filter((_, i) => i !== index);
     const updatedItem = { 
       ...item, 
-      photos: updatedPhotos,
-      lastUpdated: new Date() 
+      photos: updatedPhotos
     };
-    onUpdate(updatedItem, 'PHOTO_DELETED');
+    onUpdate(updatedItem, 'PHOTO_DELETE');
   };
 
   const handleSave = () => {
@@ -173,8 +231,56 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
       ...item,
       notes: editedNotes
     };
-    onUpdate(updatedItem, 'NOTES');
+    onUpdate(updatedItem, 'Notes');
     setIsEditingNotes(false);
+  };
+
+  const handleAddInstance = () => {
+    // Check for any validation errors
+    const hasErrors = Object.values(errors).some(error => error !== '');
+    if (hasErrors) return;
+
+    const instance: ItemInstance = {
+      ...newInstance as ItemInstance,
+      parentItemId: item.id || 0
+    };
+    
+    onInstanceAdd(instance);
+    
+    // Reset form
+    setNewInstance({
+      parentItemId: item.id || 0,
+      serialNumber: '',
+      location: '',
+      conditionCode: ''
+    });
+    setIsAddInstanceDialogOpen(false);
+  };
+
+  const handleSaveInstance = () => {
+    // Check for any validation errors
+    const hasErrors = Object.values(errors).some(error => error !== '');
+    if (hasErrors || !instanceToEdit) return;
+
+    onInstanceUpdate(instanceToEdit, 'INSTANCE_EDIT');
+    setInstanceToEdit(null);
+  };
+
+  const handleDeleteInstance = (instanceId: number) => {
+    onInstanceDelete(instanceId);
+  };
+
+  const getInstanceVerificationStatus = (instance: ItemInstance) => {
+    if (!instance.lastVerified) {
+      return <Chip icon={<Warning />} color="warning" label="Not Verified" size="small" />;
+    }
+    
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    
+    return new Date(instance.lastVerified) > oneMonthAgo ? 
+      <Chip icon={<CheckCircle />} color="success" label="Verified" size="small" /> :
+      <Chip icon={<Warning />} color="warning" label="Needs Verification" size="small" />;
   };
 
   return (
@@ -185,36 +291,30 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
             <Typography variant="h6" gutterBottom>
               {item.name || 'Unnamed Item'}
             </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>LIN:</strong> {item.lin}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>NSN:</strong> {item.nsn}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Qty Authorized:</strong> {item.qtyAuthorized}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Qty On Hand:</strong> {item.qtyOnHand}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Qty Short:</strong> {item.qtyShort}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>UI:</strong> {item.ui}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Serial Number:</strong> {item.serialNumber}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Condition Code:</strong> {item.conditionCode}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Location:</strong> {item.location || 'Not specified'}
-            </Typography>
-            <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Last Verified:</strong> {item.lastVerified ? new Date(item.lastVerified).toLocaleDateString() : 'Not verified'}
-            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+              <Box>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>LIN:</strong> {item.lin}
+                </Typography>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>NSN:</strong> {item.nsn}
+                </Typography>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>UI:</strong> {item.ui}
+                </Typography>
+              </Box>
+              <Box>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>Qty Authorized:</strong> {item.qtyAuthorized}
+                </Typography>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>Qty On Hand:</strong> {item.qtyOnHand}
+                </Typography>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  <strong>Qty Short:</strong> {item.qtyShort}
+                </Typography>
+              </Box>
+            </Box>
           </Box>
           <Box>
             <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
@@ -319,46 +419,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
                 error={!!errors.qtyOnHand}
                 helperText={errors.qtyOnHand}
               />
-              <TextField
-                fullWidth
-                label="Serial Number"
-                value={editedItem.serialNumber}
-                onChange={(e) => handleFieldChange('serialNumber', e.target.value)}
-                margin="dense"
-                error={!!errors.serialNumber}
-                helperText={errors.serialNumber}
-              />
-              <Autocomplete
-                options={CONDITION_CODES}
-                getOptionLabel={(option) => `${option.code} - ${option.description}`}
-                value={CONDITION_CODES.find(cc => cc.code === editedItem.conditionCode) || null}
-                onChange={(_, newValue) => handleFieldChange('conditionCode', newValue?.code || '')}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Condition Code"
-                    margin="dense"
-                    required
-                  />
-                )}
-              />
-              <TextField
-                fullWidth
-                label="Location"
-                value={editedItem.location}
-                onChange={(e) => handleFieldChange('location', e.target.value)}
-                margin="dense"
-                placeholder="Enter item location"
-              />
-              <TextField
-                fullWidth
-                label="Last Verified"
-                type="date"
-                value={editedItem.lastVerified ? new Date(editedItem.lastVerified).toISOString().split('T')[0] : ''}
-                onChange={(e) => handleFieldChange('lastVerified', new Date(e.target.value))}
-                margin="dense"
-                InputLabelProps={{ shrink: true }}
-              />
             </Box>
             <Box mt={1}>
               <Button variant="contained" onClick={handleSave} sx={{ mr: 1 }}>
@@ -377,61 +437,152 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           </Box>
         ) : (
           <Box>
-            {isEditingNotes ? (
-              <Box mt={1} mb={2}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Notes:
-                </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  value={editedNotes}
-                  onChange={(e) => setEditedNotes(e.target.value)}
-                  margin="dense"
-                  placeholder="Add notes about this item..."
-                />
-              </Box>
-            ) : item.notes ? (
-              <Box mt={1} mb={2}>
-                <Typography 
-                  variant="body2" 
-                  color="textSecondary" 
+            <Box mt={1} mb={2}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                <Typography variant="subtitle1">Item Instances</Typography>
+                <Button 
+                  variant="outlined" 
+                  size="small" 
+                  startIcon={<Add />}
+                  onClick={() => setIsAddInstanceDialogOpen(true)}
                   sx={{ 
-                    whiteSpace: 'pre-wrap',
-                    wordWrap: 'break-word',
-                    overflowWrap: 'break-word',
-                    maxWidth: '100%'
+                    textTransform: 'none',
+                    color: 'text.secondary !important',
+                    borderColor: 'text.secondary !important',
+                    '& .MuiSvgIcon-root': {
+                      color: 'text.secondary !important'
+                    },
+                    '&:hover': {
+                      borderColor: 'text.primary !important',
+                      color: 'text.primary !important',
+                      backgroundColor: 'action.hover',
+                      '& .MuiSvgIcon-root': {
+                        color: 'text.primary !important'
+                      }
+                    }
                   }}
                 >
-                  <strong>Notes:</strong> {item.notes}
-                </Typography>
+                  Add Instance
+                </Button>
               </Box>
-            ) : null}
+              
+              {instances.length > 0 ? (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Serial Number</TableCell>
+                        <TableCell>Location</TableCell>
+                        <TableCell>Condition Code</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {instances.map((instance) => (
+                        <TableRow key={instance.id}>
+                          <TableCell>{instance.serialNumber}</TableCell>
+                          <TableCell>{instance.location}</TableCell>
+                          <TableCell>{instance.conditionCode}</TableCell>
+                          <TableCell>{getInstanceVerificationStatus(instance)}</TableCell>
+                          <TableCell align="right">
+                            <IconButton 
+                              size="small"
+                              onClick={() => handleVerifyInstance(instance)}
+                              disabled={isInstanceVerifiedRecently(instance)}
+                            >
+                              <CheckCircle fontSize="small" />
+                            </IconButton>
+                            <IconButton 
+                              size="small"
+                              onClick={() => setInstanceToEdit(instance)}
+                            >
+                              <Edit fontSize="small" />
+                            </IconButton>
+                            <IconButton 
+                              size="small" 
+                              color="error"
+                              onClick={() => instance.id && handleDeleteInstance(instance.id)}
+                            >
+                              <Delete fontSize="small" />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
+                <Box 
+                  p={2} 
+                  textAlign="center" 
+                  sx={{ 
+                    border: '1px dashed', 
+                    borderColor: 'grey.300',
+                    borderRadius: 1 
+                  }}
+                >
+                  <Typography variant="body2" color="textSecondary">
+                    No instances added yet. Click "Add Instance" to add serial numbers, locations, etc.
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            <Divider sx={{ my: 2 }} />
+
             <Box mt={1}>
-              <Button
-                variant={isVerifiedWithinLastMonth() ? "contained" : "outlined"}
-                color="success"
-                onClick={handleVerify}
-                sx={{ mr: 1 }}
-              >
-                {isVerifiedWithinLastMonth() ? "Verified" : "Verify"}
-              </Button>
-              <Button
-                variant="outlined"
-                startIcon={<Note />}
-                onClick={() => {
-                  if (isEditingNotes) {
-                    handleSaveNotes();
-                  } else {
-                    setEditedNotes(item.notes || '');
-                    setIsEditingNotes(true);
-                  }
-                }}
-                sx={{ mr: 1 }}
-              >
-                {isEditingNotes ? 'Save Notes' : 'Notes'}
-              </Button>
+              {isEditingNotes ? (
+                <Box mt={1} mb={2}>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Notes:
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    value={editedNotes}
+                    onChange={(e) => setEditedNotes(e.target.value)}
+                    margin="dense"
+                    placeholder="Add notes about this item..."
+                  />
+                </Box>
+              ) : item.notes ? (
+                <Box mt={1} mb={2}>
+                  <Typography 
+                    variant="body2" 
+                    color="textSecondary" 
+                    sx={{ 
+                      whiteSpace: 'pre-wrap',
+                      wordWrap: 'break-word',
+                      overflowWrap: 'break-word',
+                      maxWidth: '100%'
+                    }}
+                  >
+                    <strong>Notes:</strong> {item.notes}
+                  </Typography>
+                </Box>
+              ) : null}
+              <Box mt={1}>
+                <Button
+                  variant="outlined"
+                  startIcon={<Note />}
+                  onClick={() => {
+                    if (isEditingNotes) {
+                      handleSaveNotes();
+                    } else {
+                      setEditedNotes(item.notes || '');
+                      setIsEditingNotes(true);
+                    }
+                  }}
+                  sx={{ 
+                    mr: 1,
+                    textTransform: 'none'
+                  }}
+                >
+                  {isEditingNotes ? 'Save notes' : 'Notes'}
+                </Button>
+              </Box>
             </Box>
           </Box>
         )}
@@ -482,6 +633,119 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
           </Box>
         )}
 
+        {/* Add Instance Dialog */}
+        <Dialog
+          open={isAddInstanceDialogOpen}
+          onClose={() => setIsAddInstanceDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Add Item Instance</DialogTitle>
+          <DialogContent>
+            <TextField
+              fullWidth
+              label="Serial Number"
+              value={newInstance.serialNumber}
+              onChange={(e) => handleInstanceFieldChange('serialNumber', e.target.value)}
+              margin="dense"
+              required
+              error={!!errors.serialNumber}
+              helperText={errors.serialNumber}
+            />
+            <TextField
+              fullWidth
+              label="Location"
+              value={newInstance.location}
+              onChange={(e) => handleInstanceFieldChange('location', e.target.value)}
+              margin="dense"
+              placeholder="Enter location"
+            />
+            <Autocomplete
+              options={CONDITION_CODES}
+              getOptionLabel={(option) => `${option.code} - ${option.description}`}
+              value={CONDITION_CODES.find(cc => cc.code === newInstance.conditionCode) || null}
+              onChange={(_, newValue) => handleInstanceFieldChange('conditionCode', newValue?.code || '')}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Condition Code"
+                  margin="dense"
+                  required
+                />
+              )}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setIsAddInstanceDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleAddInstance}
+              variant="contained"
+              disabled={!newInstance.serialNumber || !newInstance.conditionCode}
+            >
+              Add
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Edit Instance Dialog */}
+        <Dialog
+          open={!!instanceToEdit}
+          onClose={() => setInstanceToEdit(null)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Edit Item Instance</DialogTitle>
+          <DialogContent>
+            {instanceToEdit && (
+              <>
+                <TextField
+                  fullWidth
+                  label="Serial Number"
+                  value={instanceToEdit.serialNumber}
+                  onChange={(e) => handleInstanceFieldChange('serialNumber', e.target.value)}
+                  margin="dense"
+                  required
+                  error={!!errors.serialNumber}
+                  helperText={errors.serialNumber}
+                />
+                <TextField
+                  fullWidth
+                  label="Location"
+                  value={instanceToEdit.location}
+                  onChange={(e) => handleInstanceFieldChange('location', e.target.value)}
+                  margin="dense"
+                  placeholder="Enter location"
+                />
+                <Autocomplete
+                  options={CONDITION_CODES}
+                  getOptionLabel={(option) => `${option.code} - ${option.description}`}
+                  value={CONDITION_CODES.find(cc => cc.code === instanceToEdit.conditionCode) || null}
+                  onChange={(_, newValue) => handleInstanceFieldChange('conditionCode', newValue?.code || '')}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Condition Code"
+                      margin="dense"
+                      required
+                    />
+                  )}
+                />
+              </>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setInstanceToEdit(null)}>Cancel</Button>
+            <Button 
+              onClick={handleSaveInstance}
+              variant="contained"
+              disabled={!instanceToEdit?.serialNumber || !instanceToEdit?.conditionCode}
+            >
+              Save
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Delete Item Dialog */}
         <Dialog
           open={isDeleteDialogOpen}
           onClose={() => setIsDeleteDialogOpen(false)}

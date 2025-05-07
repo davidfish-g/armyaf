@@ -1,21 +1,28 @@
 import Dexie, { Table } from 'dexie';
 
+// Interface for instance-specific fields
+export interface ItemInstance {
+  id?: number;
+  parentItemId: number;  // Foreign key to the parent InventoryItem
+  serialNumber: string;
+  location: string;
+  conditionCode: string;
+  lastVerified?: Date;
+}
+
+// Main item with common properties
 export interface InventoryItem {
   id?: number;
   isFlagged: boolean;
   photos: string[];
   notes?: string;
-  lastVerified?: Date;
-  name: string;  // Will be renamed to nomenclature
+  name: string;  // Nomenclature
   lin: string;
   nsn: string;
   ui: string;  // Unit of Issue
   qtyAuthorized: number;
   qtyOnHand: number;
   qtyShort: number;
-  serialNumber: string;
-  conditionCode: string;
-  location: string;  // Added location field
 }
 
 export type LogAction = 
@@ -29,31 +36,38 @@ export type LogAction =
   | 'FLAGGED'
   | 'UNFLAGGED'
   | 'VERIFIED'
-  | 'NOTES';
+  | 'NOTES'
+  | 'INSTANCE_ADD'
+  | 'INSTANCE_EDIT'
+  | 'INSTANCE_DELETE';
 
 export interface LogEntry {
   id?: number;
   timestamp: Date;
   action: LogAction;
   itemId?: number;
+  instanceId?: number;
   changes?: Record<string, any>;
 }
 
 export class InventoryDatabase extends Dexie {
   items!: Table<InventoryItem>;
+  instances!: Table<ItemInstance>;
   logs!: Table<{
     id?: number;
     timestamp: Date;
     action: string;
     itemId?: number;
+    instanceId?: number;
     changes?: Record<string, any>;
   }>;
 
   constructor() {
     super('InventoryDB');
     this.version(1).stores({
-      items: '++id, name, lin, nsn, isFlagged, lastVerified',
-      logs: '++id, timestamp, action, itemId'
+      items: '++id, name, lin, nsn, isFlagged',
+      instances: '++id, parentItemId, serialNumber, conditionCode, lastVerified',
+      logs: '++id, timestamp, action, itemId, instanceId'
     });
     
     // Handle schema upgrade (e.g., data migrations)
