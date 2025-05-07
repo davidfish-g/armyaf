@@ -5,7 +5,6 @@ export interface InventoryItem {
   isFlagged: boolean;
   photos: string[];
   notes?: string;
-  lastUpdated: Date;
   lastVerified?: Date;
   name: string;  // Will be renamed to nomenclature
   lin: string;
@@ -16,7 +15,7 @@ export interface InventoryItem {
   qtyShort: number;
   serialNumber: string;
   conditionCode: string;
-  documentNumber: string;
+  location: string;  // Added location field
 }
 
 export type LogAction = 
@@ -53,7 +52,7 @@ export class InventoryDatabase extends Dexie {
   constructor() {
     super('InventoryDB');
     this.version(1).stores({
-      items: '++id, name, lin, nsn, isFlagged, lastUpdated, lastVerified',
+      items: '++id, name, lin, nsn, isFlagged, lastVerified',
       logs: '++id, timestamp, action, itemId'
     });
     

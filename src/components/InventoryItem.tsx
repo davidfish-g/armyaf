@@ -23,7 +23,6 @@ import {
   formatLIN, 
   validateSerialNumber, 
   formatSerialNumber, 
-  validateDocumentNumber,
   UI_OPTIONS,
   CONDITION_CODES,
   calculateQtyShort
@@ -65,8 +64,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
         return validateLIN(value) ? null : 'LIN must be 1-6 alphanumeric characters';
       case 'serialNumber':
         return validateSerialNumber(value) ? null : 'Invalid serial number format';
-      case 'documentNumber':
-        return validateDocumentNumber(value) ? null : 'Invalid document number format';
       case 'qtyAuthorized':
       case 'qtyOnHand':
         return value >= 0 ? null : 'Quantity must be 0 or greater';
@@ -165,8 +162,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
 
     const updatedItem = {
       ...item,
-      ...editedItem,
-      lastUpdated: new Date()
+      ...editedItem
     };
     onUpdate(updatedItem, 'EDIT');
     setIsEditing(false);
@@ -175,8 +171,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
   const handleSaveNotes = () => {
     const updatedItem = {
       ...item,
-      notes: editedNotes,
-      lastUpdated: new Date()
+      notes: editedNotes
     };
     onUpdate(updatedItem, 'NOTES');
     setIsEditingNotes(false);
@@ -215,7 +210,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
               <strong>Condition Code:</strong> {item.conditionCode}
             </Typography>
             <Typography variant="body2" color="textSecondary" gutterBottom>
-              <strong>Document Number:</strong> {item.documentNumber}
+              <strong>Location:</strong> {item.location || 'Not specified'}
             </Typography>
             <Typography variant="body2" color="textSecondary" gutterBottom>
               <strong>Last Verified:</strong> {item.lastVerified ? new Date(item.lastVerified).toLocaleDateString() : 'Not verified'}
@@ -349,12 +344,11 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({ item, onUpdate, on
               />
               <TextField
                 fullWidth
-                label="Document Number"
-                value={editedItem.documentNumber}
-                onChange={(e) => handleFieldChange('documentNumber', e.target.value)}
+                label="Location"
+                value={editedItem.location}
+                onChange={(e) => handleFieldChange('location', e.target.value)}
                 margin="dense"
-                error={!!errors.documentNumber}
-                helperText={errors.documentNumber}
+                placeholder="Enter item location"
               />
               <TextField
                 fullWidth

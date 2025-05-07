@@ -26,12 +26,6 @@ export const formatSerialNumber = (serial: string): string => {
   return serial.toUpperCase();
 };
 
-// Document number validation: 14-character alphanumeric (DODAAC + Julian Date + Serial)
-export const validateDocumentNumber = (doc: string): boolean => {
-  const docRegex = /^[A-Z0-9]{6}\d{4}[A-Z0-9]{4}$/;
-  return docRegex.test(doc);
-};
-
 // Unit of Issue options
 export const UI_OPTIONS = [
   { code: 'AM', name: 'AMPOULE' },

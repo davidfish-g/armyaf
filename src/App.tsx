@@ -45,9 +45,8 @@ type SortField =
   | 'ui'
   | 'serialNumber'
   | 'conditionCode'
-  | 'documentNumber'
-  | 'lastVerified' 
-  | 'lastUpdated';
+  | 'location'
+  | 'lastVerified';
 type SortDirection = 'asc' | 'desc';
 type FilterType = 'all' | 'flagged' | 'unverified';
 
@@ -105,11 +104,10 @@ function App() {
     ui: '',
     serialNumber: '',
     conditionCode: '',
-    documentNumber: '',
+    location: '',
     notes: '',
     isFlagged: false,
-    photos: [],
-    lastUpdated: new Date()
+    photos: []
   });
 
   useEffect(() => {
@@ -161,7 +159,6 @@ function App() {
           isFlagged: updatedItem.isFlagged,
           photos: updatedItem.photos,
           notes: updatedItem.notes,
-          lastUpdated: updatedItem.lastUpdated,
           name: updatedItem.name,
           lin: updatedItem.lin,
           nsn: updatedItem.nsn,
@@ -171,7 +168,7 @@ function App() {
           ui: updatedItem.ui,
           serialNumber: updatedItem.serialNumber,
           conditionCode: updatedItem.conditionCode,
-          documentNumber: updatedItem.documentNumber,
+          location: updatedItem.location,
           lastVerified: updatedItem.lastVerified
         });
         
@@ -243,8 +240,7 @@ function App() {
   const handleAddItem = async () => {
     try {
       const itemToAdd: InventoryItemType = {
-        ...newItem as InventoryItemType,
-        lastUpdated: new Date()
+        ...newItem as InventoryItemType
       };
       
       // Add to database
@@ -271,11 +267,10 @@ function App() {
         ui: '',
         serialNumber: '',
         conditionCode: '',
-        documentNumber: '',
+        location: '',
         notes: '',
         isFlagged: false,
-        photos: [],
-        lastUpdated: new Date()
+        photos: []
       });
       setIsAddItemDialogOpen(false);
     } catch (error) {
@@ -313,8 +308,10 @@ function App() {
         case 'ui':
         case 'serialNumber':
         case 'conditionCode':
-        case 'documentNumber':
-          comparison = (a[sortField] || '').localeCompare(b[sortField] || '');
+        case 'location':
+          const valueA = String(a[sortField] || '');
+          const valueB = String(b[sortField] || '');
+          comparison = valueA.localeCompare(valueB);
           break;
         case 'qtyAuthorized':
         case 'qtyOnHand':
@@ -322,7 +319,6 @@ function App() {
           comparison = (a[sortField] || 0) - (b[sortField] || 0);
           break;
         case 'lastVerified':
-        case 'lastUpdated':
           const dateA = a[sortField] ? new Date(a[sortField]!).getTime() : 0;
           const dateB = b[sortField] ? new Date(b[sortField]!).getTime() : 0;
           comparison = dateA - dateB;
@@ -428,9 +424,8 @@ function App() {
                         <MenuItem value="ui">Unit of Issue</MenuItem>
                         <MenuItem value="serialNumber">Serial Number</MenuItem>
                         <MenuItem value="conditionCode">Condition Code</MenuItem>
-                        <MenuItem value="documentNumber">Document Number</MenuItem>
+                        <MenuItem value="location">Location</MenuItem>
                         <MenuItem value="lastVerified">Last Verified</MenuItem>
-                        <MenuItem value="lastUpdated">Last Updated</MenuItem>
                       </Select>
                     </FormControl>
                     <IconButton 
@@ -619,10 +614,11 @@ function App() {
               <Grid item xs={12}>
                 <TextField
                   fullWidth
-                  label="Document Number"
-                  value={newItem.documentNumber}
-                  onChange={(e) => setNewItem(prev => ({ ...prev, documentNumber: e.target.value }))}
+                  label="Location"
+                  value={newItem.location}
+                  onChange={(e) => setNewItem(prev => ({ ...prev, location: e.target.value }))}
                   margin="dense"
+                  placeholder="Enter item location"
                 />
               </Grid>
               <Grid item xs={12}>
