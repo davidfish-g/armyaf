@@ -24,7 +24,6 @@ import {
   Chip,
 } from '@mui/material';
 import { 
-  PhotoCamera, 
   Delete, 
   Note, 
   Edit, 
@@ -79,7 +78,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({
     location: '',
     conditionCode: ''
   });
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Update the editedItem whenever the item prop changes
   useEffect(() => {
@@ -184,35 +182,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({
     onUpdate(updatedItem, item.isFlagged ? 'UNFLAGGED' : 'FLAGGED');
   };
 
-  const handlePhotoCapture = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    try {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const photoUrl = e.target?.result as string;
-        const updatedItem = {
-          ...item,
-          photos: [...item.photos, photoUrl]
-        };
-        onUpdate(updatedItem, 'PHOTO_ADD');
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      console.error('Error capturing photo:', error);
-    }
-  };
-
-  const handleDeletePhoto = (index: number) => {
-    const updatedPhotos = item.photos.filter((_, i) => i !== index);
-    const updatedItem = { 
-      ...item, 
-      photos: updatedPhotos
-    };
-    onUpdate(updatedItem, 'PHOTO_DELETE');
-  };
-
   const handleSave = () => {
     // Check for any validation errors
     const hasErrors = Object.values(errors).some(error => error !== '');
@@ -275,12 +244,27 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({
       return <Chip icon={<Warning />} color="warning" label="Not Verified" size="small" />;
     }
     
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const lastVerified = new Date(instance.lastVerified);
+    const now = new Date();
+    const diffInDays = Math.floor((now.getTime() - lastVerified.getTime()) / (1000 * 60 * 60 * 24));
     
-    return new Date(instance.lastVerified) > oneMonthAgo ? 
-      <Chip icon={<CheckCircle />} color="success" label="Verified" size="small" /> :
-      <Chip icon={<Warning />} color="warning" label="Needs Verification" size="small" />;
+    let timeAgo = '';
+    if (diffInDays === 0) {
+      const diffInHours = Math.floor((now.getTime() - lastVerified.getTime()) / (1000 * 60 * 60));
+      timeAgo = diffInHours === 0 ? 'Just now' : `${diffInHours}h ago`;
+    } else if (diffInDays < 30) {
+      timeAgo = `${diffInDays}d ago`;
+    } else {
+      const diffInMonths = Math.floor(diffInDays / 30);
+      timeAgo = `${diffInMonths}m ago`;
+    }
+    
+    return <Chip 
+      icon={<CheckCircle />} 
+      color={diffInDays < 30 ? "success" : "warning"} 
+      label={timeAgo} 
+      size="small" 
+    />;
   };
 
   return (
@@ -289,49 +273,18 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({
         <Box display="flex" justifyContent="space-between" alignItems="flex-start">
           <Box>
             <Typography variant="h6" gutterBottom>
-              {item.name || 'Unnamed Item'}
+              {item.name}
             </Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-              <Box>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  <strong>LIN:</strong> {item.lin}
-                </Typography>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  <strong>NSN:</strong> {item.nsn}
-                </Typography>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  <strong>UI:</strong> {item.ui}
-                </Typography>
-              </Box>
-              <Box>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  <strong>Qty Authorized:</strong> {item.qtyAuthorized}
-                </Typography>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  <strong>Qty On Hand:</strong> {item.qtyOnHand}
-                </Typography>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  <strong>Qty Short:</strong> {item.qtyShort}
-                </Typography>
-              </Box>
-            </Box>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              LIN: {item.lin} | NSN: {item.nsn} | UI: {item.ui}
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              Qty Authorized: {item.qtyAuthorized} | Qty On Hand: {item.qtyOnHand} | Qty Short: {item.qtyShort}
+            </Typography>
           </Box>
+
           <Box>
             <Box display="flex" flexDirection="column" alignItems="center" gap={1}>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                style={{ display: 'none' }}
-                ref={fileInputRef}
-                onChange={handlePhotoCapture}
-              />
-              <IconButton
-                color="primary"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <PhotoCamera />
-              </IconButton>
               <IconButton
                 color="primary"
                 onClick={() => setIsEditing(true)}
@@ -474,7 +427,7 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({
                         <TableCell>Serial Number</TableCell>
                         <TableCell>Location</TableCell>
                         <TableCell>Condition Code</TableCell>
-                        <TableCell>Status</TableCell>
+                        <TableCell>Last Verified</TableCell>
                         <TableCell align="right">Actions</TableCell>
                       </TableRow>
                     </TableHead>
@@ -583,52 +536,6 @@ export const InventoryItem: React.FC<InventoryItemProps> = ({
                   {isEditingNotes ? 'Save notes' : 'Notes'}
                 </Button>
               </Box>
-            </Box>
-          </Box>
-        )}
-
-        {item.photos.length > 0 && (
-          <Box mt={1}>
-            <Typography variant="subtitle2" gutterBottom>
-              Photos:
-            </Typography>
-            <Box display="flex" gap={1} flexWrap="wrap">
-              {item.photos.map((photo, index) => (
-                <Box
-                  key={index}
-                  sx={{
-                    position: 'relative',
-                    width: 100,
-                    height: 100
-                  }}
-                >
-                  <img
-                    src={photo}
-                    alt={`Item ${index + 1}`}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: 4
-                    }}
-                  />
-                  <IconButton
-                    size="small"
-                    sx={{
-                      position: 'absolute',
-                      top: -8,
-                      right: -8,
-                      backgroundColor: 'background.paper',
-                      '&:hover': {
-                        backgroundColor: 'background.paper'
-                      }
-                    }}
-                    onClick={() => handleDeletePhoto(index)}
-                  >
-                    <Delete fontSize="small" />
-                  </IconButton>
-                </Box>
-              ))}
             </Box>
           </Box>
         )}

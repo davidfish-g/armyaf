@@ -34,29 +34,60 @@ export const logInventoryActivity = async (
 /**
  * Log an item update with detailed changes
  */
-export const logItemUpdate = async (
-  oldItem: InventoryItem,
-  newItem: InventoryItem,
-  action: 'EDIT' | 'PHOTO_ADD' | 'PHOTO_DELETE' | 'FLAGGED' | 'UNFLAGGED' | 'VERIFIED'
-): Promise<number> => {
+export const logItemUpdate = async (oldItem: InventoryItem, newItem: InventoryItem, action: LogAction) => {
   const changes: Record<string, any> = {};
   
-  // Track flag changes
-  if (oldItem.isFlagged !== newItem.isFlagged) {
-    changes.isFlagged = {
-      from: oldItem.isFlagged,
-      to: newItem.isFlagged
+  // Track name changes
+  if (oldItem.name !== newItem.name) {
+    changes.name = {
+      from: oldItem.name,
+      to: newItem.name
     };
   }
   
-  // lastVerified is now on ItemInstance, not on InventoryItem
-  // Verification is now tracked per instance
+  // Track LIN changes
+  if (oldItem.lin !== newItem.lin) {
+    changes.lin = {
+      from: oldItem.lin,
+      to: newItem.lin
+    };
+  }
   
-  // Track photo changes
-  if (oldItem.photos.length !== newItem.photos.length) {
-    changes.photos = {
-      from: oldItem.photos.length,
-      to: newItem.photos.length
+  // Track NSN changes
+  if (oldItem.nsn !== newItem.nsn) {
+    changes.nsn = {
+      from: oldItem.nsn,
+      to: newItem.nsn
+    };
+  }
+  
+  // Track UI changes
+  if (oldItem.ui !== newItem.ui) {
+    changes.ui = {
+      from: oldItem.ui,
+      to: newItem.ui
+    };
+  }
+  
+  // Track quantity changes
+  if (oldItem.qtyAuthorized !== newItem.qtyAuthorized) {
+    changes.qtyAuthorized = {
+      from: oldItem.qtyAuthorized,
+      to: newItem.qtyAuthorized
+    };
+  }
+  
+  if (oldItem.qtyOnHand !== newItem.qtyOnHand) {
+    changes.qtyOnHand = {
+      from: oldItem.qtyOnHand,
+      to: newItem.qtyOnHand
+    };
+  }
+  
+  if (oldItem.qtyShort !== newItem.qtyShort) {
+    changes.qtyShort = {
+      from: oldItem.qtyShort,
+      to: newItem.qtyShort
     };
   }
   
@@ -67,60 +98,22 @@ export const logItemUpdate = async (
       to: newItem.notes
     };
   }
-
-  // Track hard-coded field changes
-  if (oldItem.name !== newItem.name) {
-    changes.name = {
-      from: oldItem.name,
-      to: newItem.name
+  
+  // Track flag changes
+  if (oldItem.isFlagged !== newItem.isFlagged) {
+    changes.isFlagged = {
+      from: oldItem.isFlagged,
+      to: newItem.isFlagged
     };
-  }
-
-  if (oldItem.lin !== newItem.lin) {
-    changes.lin = {
-      from: oldItem.lin,
-      to: newItem.lin
-    };
-  }
-
-  if (oldItem.nsn !== newItem.nsn) {
-    changes.nsn = {
-      from: oldItem.nsn,
-      to: newItem.nsn
-    };
-  }
-
-  if (oldItem.qtyAuthorized !== newItem.qtyAuthorized) {
-    changes.qtyAuthorized = {
-      from: oldItem.qtyAuthorized,
-      to: newItem.qtyAuthorized
-    };
-  }
-
-  if (oldItem.qtyOnHand !== newItem.qtyOnHand) {
-    changes.qtyOnHand = {
-      from: oldItem.qtyOnHand,
-      to: newItem.qtyOnHand
-    };
-  }
-
-  if (oldItem.qtyShort !== newItem.qtyShort) {
-    changes.qtyShort = {
-      from: oldItem.qtyShort,
-      to: newItem.qtyShort
-    };
-  }
-
-  // If no changes were detected, don't log anything
-  if (Object.keys(changes).length === 0) {
-    return -1;
   }
   
-  return logInventoryActivity(
+  // Log the changes
+  await db.logs.add({
+    timestamp: new Date(),
     action,
-    newItem,
+    itemId: oldItem.id,
     changes
-  );
+  });
 };
 
 /**

@@ -26,8 +26,6 @@ const actionColors = {
   EDIT: '#2196f3',          // Blue
   IMPORT: '#00bcd4',        // Cyan
   EXPORT: '#9c27b0',        // Purple
-  PHOTO_ADD: '#ff9800',     // Orange
-  PHOTO_DELETE: '#ff5722',  // Deep Orange
   FLAGGED: '#d32f2f',       // Dark Red
   UNFLAGGED: '#388e3c',     // Dark Green
   VERIFIED: '#2e7d32',      // Darker Green
@@ -92,8 +90,6 @@ export const LogViewer: React.FC = () => {
       case 'EDIT': return 'Edited';
       case 'IMPORT': return 'Imported';
       case 'EXPORT': return 'Exported';
-      case 'PHOTO_ADD': return 'Photo Added';
-      case 'PHOTO_DELETE': return 'Photo Removed';
       case 'FLAGGED': return 'Flagged';
       case 'UNFLAGGED': return 'Unflagged';
       case 'VERIFIED': return 'Verified';
@@ -158,14 +154,6 @@ export const LogViewer: React.FC = () => {
           Item verified
         </Typography>
       );
-    }
-    
-    if (log.action === 'PHOTO_ADD') {
-      return <Typography variant="body2">Photo added to item</Typography>;
-    }
-    
-    if (log.action === 'PHOTO_DELETE') {
-      return <Typography variant="body2">Photo removed from item</Typography>;
     }
     
     if (log.action === 'IMPORT' && log.changes?.importedCount) {

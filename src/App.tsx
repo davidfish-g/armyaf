@@ -30,10 +30,11 @@ import { InventoryItem } from './components/InventoryItem';
 import { LogViewer } from './components/LogViewer';
 import { db, InventoryItem as InventoryItemType, ItemInstance, LogAction } from './db/database';
 import { exportToSpreadsheet } from './utils/spreadsheetUtils';
-import { Close, ArrowDropDown, History, ArrowUpward, ArrowDownward, Flag, Delete } from '@mui/icons-material';
+import { Close, ArrowDropDown, History, ArrowUpward, ArrowDownward, Flag, Delete, Menu as MenuIcon, KeyboardArrowLeft } from '@mui/icons-material';
 import { logInventoryActivity, logItemUpdate } from './utils/logUtils';
 import theme from './theme';
 import { UI_OPTIONS, CONDITION_CODES, calculateQtyShort } from './utils/validationUtils';
+import { Box as MuiBox } from '@mui/material';
 
 type SortField = 
   | 'name' 
@@ -104,6 +105,7 @@ function App() {
   const [itemInstances, setItemInstances] = useState<Record<number, ItemInstance[]>>({});
   const [loading, setLoading] = useState(false);
   const [exportAnchorEl, setExportAnchorEl] = useState<null | HTMLElement>(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState<null | HTMLElement>(null);
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
   const [isAddItemDialogOpen, setIsAddItemDialogOpen] = useState(false);
@@ -119,8 +121,7 @@ function App() {
     qtyShort: 0,
     ui: '',
     notes: '',
-    isFlagged: false,
-    photos: []
+    isFlagged: false
   });
   const [newItemInstances, setNewItemInstances] = useState<Partial<ItemInstance>[]>([]);
 
@@ -185,7 +186,6 @@ function App() {
         // Update in IndexedDB
         await db.items.update(updatedItem.id, {
           isFlagged: updatedItem.isFlagged,
-          photos: updatedItem.photos,
           notes: updatedItem.notes,
           name: updatedItem.name,
           lin: updatedItem.lin,
@@ -197,8 +197,7 @@ function App() {
         });
         
         // Log the update with the specific action
-        if (action === 'EDIT' || action === 'PHOTO_ADD' || action === 'PHOTO_DELETE' || 
-            action === 'FLAGGED' || action === 'UNFLAGGED' || action === 'VERIFIED') {
+        if (action === 'EDIT' || action === 'FLAGGED' || action === 'UNFLAGGED' || action === 'VERIFIED') {
           await logItemUpdate(originalItem, updatedItem, action as any);
         } else {
           await logInventoryActivity(action as LogAction, updatedItem, {});
@@ -468,8 +467,7 @@ function App() {
         qtyShort: 0,
         ui: '',
         notes: '',
-        isFlagged: false,
-        photos: []
+        isFlagged: false
       });
       setNewItemInstances([]);
       setIsAddItemDialogOpen(false);
@@ -586,38 +584,94 @@ function App() {
             >
               Add Item
             </Button>
-            <Button 
-              color="inherit" 
-              onClick={() => setIsUploadDialogOpen(true)}
-              sx={{ mr: 1 }}
+            <Box
+              onMouseEnter={(e) => setMenuAnchorEl(e.currentTarget)}
+              onMouseLeave={() => {
+                if (!exportAnchorEl) {
+                  setMenuAnchorEl(null);
+                }
+              }}
             >
-              Import
-            </Button>
-            <Button 
-              color="inherit" 
-              onClick={(e) => setExportAnchorEl(e.currentTarget)}
-              disabled={items.length === 0}
-              endIcon={<ArrowDropDown />}
-              sx={{ mr: 1 }}
-            >
-              Export
-            </Button>
-            <IconButton 
-              color="inherit" 
-              onClick={() => setIsLogDrawerOpen(true)}
-              aria-label="view history"
-            >
-              <History />
-            </IconButton>
-            <Menu
-              anchorEl={exportAnchorEl}
-              open={Boolean(exportAnchorEl)}
-              onClose={() => setExportAnchorEl(null)}
-            >
-              <MenuItem onClick={() => handleExport('xlsx')}>.xlsx</MenuItem>
-              <MenuItem onClick={() => handleExport('ods')}>.ods</MenuItem>
-              <MenuItem onClick={() => handleExport('csv')}>.csv</MenuItem>
-            </Menu>
+              <IconButton
+                color="inherit"
+                onClick={(e) => setMenuAnchorEl(e.currentTarget)}
+                aria-label="menu"
+              >
+                <MenuIcon />
+              </IconButton>
+              <Menu
+                anchorEl={menuAnchorEl}
+                open={Boolean(menuAnchorEl)}
+                onClose={() => setMenuAnchorEl(null)}
+                MenuListProps={{
+                  // No hover handlers
+                }}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'right',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+                PaperProps={{
+                  sx: {
+                    minWidth: '150px'
+                  }
+                }}
+              >
+                <MenuItem 
+                  onClick={() => {
+                    setIsLogDrawerOpen(true);
+                    setMenuAnchorEl(null);
+                  }}
+                  sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}
+                >
+                  History
+                </MenuItem>
+                <MenuItem 
+                  onClick={() => {
+                    setIsUploadDialogOpen(true);
+                    setMenuAnchorEl(null);
+                  }}
+                  sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}
+                >
+                  Import
+                </MenuItem>
+                <MenuItem 
+                  onClick={(e) => {
+                    setExportAnchorEl(e.currentTarget);
+                  }}
+                  disabled={items.length === 0}
+                  sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}
+                >
+                  <MuiBox sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <KeyboardArrowLeft fontSize="small" />
+                    Export
+                  </MuiBox>
+                </MenuItem>
+              </Menu>
+              <Menu
+                anchorEl={exportAnchorEl}
+                open={Boolean(exportAnchorEl)}
+                onClose={() => setExportAnchorEl(null)}
+                MenuListProps={{
+                  // No hover handlers
+                }}
+                anchorOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'right',
+                }}
+              >
+                <MenuItem onClick={() => handleExport('xlsx')}>.xlsx</MenuItem>
+                <MenuItem onClick={() => handleExport('ods')}>.ods</MenuItem>
+                <MenuItem onClick={() => handleExport('csv')}>.csv</MenuItem>
+              </Menu>
+            </Box>
           </Toolbar>
         </AppBar>
 

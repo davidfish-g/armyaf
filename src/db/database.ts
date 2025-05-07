@@ -14,7 +14,6 @@ export interface ItemInstance {
 export interface InventoryItem {
   id?: number;
   isFlagged: boolean;
-  photos: string[];
   notes?: string;
   name: string;  // Nomenclature
   lin: string;
@@ -31,8 +30,6 @@ export type LogAction =
   | 'DELETE'
   | 'EXPORT'
   | 'IMPORT'
-  | 'PHOTO_ADD'
-  | 'PHOTO_DELETE'
   | 'FLAGGED'
   | 'UNFLAGGED'
   | 'VERIFIED'

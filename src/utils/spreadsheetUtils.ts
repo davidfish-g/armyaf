@@ -49,6 +49,9 @@ const FIELD_MAPPINGS = {
   isFlagged: [
     'Flagged', 'Is Flagged', 'Flag', 'Marked', 'Highlight', 'Attention',
     'Needs Attention', 'Issue', 'Problem', 'Concern'
+  ],
+  notes: [
+    'Notes', 'Item Notes', 'Description', 'Item Description', 'End Item Description'
   ]
 };
 
@@ -100,23 +103,7 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
         const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
         const items: InventoryItem[] = jsonData.map((row: any) => {
-          const qtyAuthorized = Number(findFieldValue(row, FIELD_MAPPINGS.qtyAuthorized)) || 0;
-          const qtyOnHand = Number(findFieldValue(row, FIELD_MAPPINGS.qtyOnHand)) || 0;
-          
-          // Create item with only the fields from InventoryItem interface
-          const item: InventoryItem = {
-            isFlagged: parseFlagValue(findFieldValue(row, FIELD_MAPPINGS.isFlagged)),
-            photos: [],
-            name: findFieldValue(row, FIELD_MAPPINGS.name) || '',
-            lin: findFieldValue(row, FIELD_MAPPINGS.lin) || '',
-            nsn: findFieldValue(row, FIELD_MAPPINGS.nsn) || '',
-            qtyAuthorized,
-            qtyOnHand,
-            qtyShort: calculateQtyShort(qtyAuthorized, qtyOnHand),
-            ui: findFieldValue(row, FIELD_MAPPINGS.ui) || '',
-            notes: row['Notes'] || ''
-          };
-
+          const item = parseRow(row);
           return item;
         });
 
@@ -129,6 +116,32 @@ export const parseSpreadsheet = (file: File): Promise<InventoryItem[]> => {
     reader.onerror = (error) => reject(error);
     reader.readAsBinaryString(file);
   });
+};
+
+const parseRow = (row: any): InventoryItem => {
+  try {
+    const item: InventoryItem = {
+      isFlagged: parseFlagValue(findFieldValue(row, FIELD_MAPPINGS.isFlagged)),
+      name: findFieldValue(row, FIELD_MAPPINGS.name) || '',
+      lin: findFieldValue(row, FIELD_MAPPINGS.lin) || '',
+      nsn: findFieldValue(row, FIELD_MAPPINGS.nsn) || '',
+      qtyAuthorized: parseFloat(findFieldValue(row, FIELD_MAPPINGS.qtyAuthorized)) || 0,
+      qtyOnHand: parseFloat(findFieldValue(row, FIELD_MAPPINGS.qtyOnHand)) || 0,
+      qtyShort: parseFloat(findFieldValue(row, FIELD_MAPPINGS.qtyShort)) || 0,
+      ui: findFieldValue(row, FIELD_MAPPINGS.ui) || '',
+      notes: findFieldValue(row, FIELD_MAPPINGS.notes) || ''
+    };
+
+    // Calculate qtyShort if not provided
+    if (!item.qtyShort) {
+      item.qtyShort = calculateQtyShort(item.qtyAuthorized, item.qtyOnHand);
+    }
+
+    return item;
+  } catch (error) {
+    console.error('Error parsing row:', error);
+    throw error;
+  }
 };
 
 export const exportToSpreadsheet = (
